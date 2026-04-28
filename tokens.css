@@ -1,0 +1,29 @@
+/* Shared color + font tokens for both versions.
+   White : Red : Black = 6 : 3 : 1 */
+:root {
+  --paper: #FAFAF7;
+  --paper-2: #F2F1EB;
+  --ink:   #111111;
+  --ink-2: #2A2A2A;
+  --red:   #E63946;
+  --red-2: #C5293A;
+  --red-soft: #FBE6E8;
+  --line:  rgba(0,0,0,0.08);
+  --gold:  #C9A24A;
+  --gold-2:#8B6A1E;
+}
+
+/* Pixel/dot rendering aid for Game Boy version */
+.pix { image-rendering: pixelated; -ms-interpolation-mode: nearest-neighbor; }
+
+/* Galmuri (한글 픽셀) + Geist (영문) — load once, use everywhere */
+@font-face {
+  font-family: 'Galmuri11';
+  src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_galmuri11@1.0/Galmuri11.woff2') format('woff2');
+  font-weight: 400; font-display: swap;
+}
+@font-face {
+  font-family: 'Galmuri11';
+  src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_galmuri11@1.0/Galmuri11-Bold.woff2') format('woff2');
+  font-weight: 700; font-display: swap;
+}

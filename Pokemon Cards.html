@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1440"/>
+<title>Pokemon Cards · Game Boy version</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css"/>
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; font-family: 'Geist', system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="version-gameboy.jsx"></script>
+<script type="text/babel" src="version-gameboy-extra.jsx"></script>
+<script type="text/babel" src="version-gameboy-auth.jsx"></script>
+
+<script type="text/babel">
+  function Phone({ children }) {
+    return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F7F5F0', padding: 16, boxSizing: 'border-box' }}>
+        <IOSDevice width={360} height={780}>
+          <div style={{ height: 56 }} />
+          <div style={{ height: 'calc(100% - 56px - 24px)', overflow: 'hidden', position: 'relative' }}>
+            {children}
+          </div>
+        </IOSDevice>
+      </div>
+    );
+  }
+
+  // ─── Full app: nav between all screens with auth gating ─
+  // Default: logged in (so you can show all screens). LOGIN flow shown
+  // separately as standalone artboards.
+  function GameBoyApp({ initialUser, initialScreen = 'home' }) {
+    const [user, setUser]       = React.useState(initialUser ?? { id: '피카츄러버', phone: '010-1234-5678', region: '서울 강남구 역삼동' });
+    const [screen, setScreen]   = React.useState(initialScreen);
+    const [location, setLoc]    = React.useState('강남구 역삼동');
+    const [openPost, setOpenPost] = React.useState(null);
+
+    const goto = (s) => {
+      // Auth-gate community + post
+      if (!user && (s === 'community' || s === 'post')) {
+        setScreen('authwall-' + s);
+        return;
+      }
+      setScreen(s);
+    };
+
+    if (screen === 'detail' && openPost) {
+      return <PostDetailGB post={openPost} onBack={() => setScreen('community')}/>;
+    }
+
+    if (screen === 'login') {
+      return <LoginGB onBack={() => setScreen('home')} onDone={(id) => { setUser({ id, phone: '010-1234-5678', region: '서울 강남구 역삼동' }); setScreen('home'); }}/>;
+    }
+    if (screen.startsWith('authwall-')) {
+      const what = screen.replace('authwall-', '');
+      return <AuthWall what={what} onLogin={() => setScreen('login')} onBack={() => setScreen('map')}/>;
+    }
+    if (screen === 'profile') {
+      return <ProfileGB user={user} onNav={goto} onLogout={() => { setUser(null); setScreen('home'); }}/>;
+    }
+    if (screen === 'location') {
+      return <LocationSearchGB current={location} onPick={(r) => { setLoc(r.replace(/^[^\s]+\s/, '')); setScreen('home'); }} onBack={() => setScreen('home')}/>;
+    }
+    if (screen === 'community') {
+      return <CommunityGB onNav={goto} onOpenPost={(p) => { setOpenPost(p); setScreen('detail'); }}/>;
+    }
+    if (screen === 'post')  return <PostGB onNav={goto}/>;
+    if (screen === 'map')   return <MapGB onNav={goto}/>;
+    return <HomeGB onNav={goto} user={user} location={location}/>;
+  }
+
+  // For static artboards: a wrapper that takes a fixed initial state
+  function StaticDetail({ post }) {
+    return <PostDetailGB post={post} onBack={() => {}}/>;
+  }
+  function StaticLocation() {
+    return <LocationSearchGB current="역삼동" onPick={() => {}} onBack={() => {}}/>;
+  }
+  function StaticProfile() {
+    return <ProfileGB user={{ id: '피카츄러버', phone: '010-1234-5678', region: '서울 강남구 역삼동' }} onNav={() => {}} onLogout={() => {}}/>;
+  }
+  function StaticAuthWall() {
+    return <AuthWall what="community" onLogin={() => {}} onBack={() => {}}/>;
+  }
+  // Login at each step
+  function StaticLogin({ step }) {
+    const [_, force] = React.useState(0);
+    React.useEffect(() => { force(1); }, []);
+    return (
+      <LoginGB onBack={() => {}} onDone={() => {}} key={step}/>
+    );
+  }
+
+  const W = 420, H = 860;
+
+  function App() {
+    const samplePost = window.COMMUNITY[0];
+    return (
+      <DesignCanvas>
+
+        <DCSection id="core" title="Game Boy 버전 — 메인 화면" subtitle="픽셀 폰트 · 도트 그래픽 · 하양:빨강:검정 6:3:1">
+          <DCArtboard id="gb-home"      label="01 Home — 위치 검색 + 프로필 진입" width={W} height={H}>
+            <Phone><HomeGB onNav={() => {}} user={{ id: '피카츄러버' }} location="강남구 역삼동"/></Phone>
+          </DCArtboard>
+          <DCArtboard id="gb-home-guest" label="02 Home — 비로그인" width={W} height={H}>
+            <Phone><HomeGB onNav={() => {}} user={null} location="강남구 역삼동"/></Phone>
+          </DCArtboard>
+          <DCArtboard id="gb-location"  label="03 위치 검색" width={W} height={H}>
+            <Phone><StaticLocation/></Phone>
+          </DCArtboard>
+          <DCArtboard id="gb-map"       label="04 Map — 핀/INDEX/FILTER (찾기)" width={W} height={H}>
+            <Phone><MapGB onNav={() => {}}/></Phone>
+          </DCArtboard>
+          <DCArtboard id="gb-post"      label="05 Post — 글쓰기 (검색 picker + 흰/회 버튼)" width={W} height={H}>
+            <Phone><PostGB onNav={() => {}}/></Phone>
+          </DCArtboard>
+          <DCArtboard id="gb-community" label="06 Community — 시/구 필터 + 질문" width={W} height={H}>
+            <Phone><CommunityGB onNav={() => {}} onOpenPost={() => {}}/></Phone>
+          </DCArtboard>
+          <DCArtboard id="gb-detail"    label="07 Post Detail — 댓글 + 하트" width={W} height={H}>
+            <Phone><StaticDetail post={samplePost}/></Phone>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="auth" title="로그인 + 프로필" subtitle="3-step 가입 (번호 → 인증 → 아이디) · 비로그인 게이트">
+          <DCArtboard id="gb-authwall" label="08 Auth Wall — 비로그인이 커뮤니티 진입 시" width={W} height={H}>
+            <Phone><StaticAuthWall/></Phone>
+          </DCArtboard>
+          <DCArtboard id="gb-login" label="09 Login — STEP 1/2/3" width={W} height={H}>
+            <Phone><StaticLogin step="phone"/></Phone>
+          </DCArtboard>
+          <DCArtboard id="gb-profile"  label="10 Profile — 트레이너 카드" width={W} height={H}>
+            <Phone><StaticProfile/></Phone>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="flow" title="Interactive — 전체 네비게이션" subtitle="홈→로그인→가입 / 홈→위치검색 / 커뮤니티→상세">
+          <DCArtboard id="gb-flow" label="Pokemon Cards · 전체 흐름 (logged in)" width={W} height={H}>
+            <Phone><GameBoyApp/></Phone>
+          </DCArtboard>
+          <DCArtboard id="gb-flow-guest" label="비로그인 → 커뮤니티 누르면 게이트" width={W} height={H}>
+            <Phone><GameBoyApp initialUser={null}/></Phone>
+          </DCArtboard>
+        </DCSection>
+
+        <DCPostIt top={40} left={40} rotate={-3} width={250}>
+          ▶ 홈: 위치 CHANGE / 검색<br/>
+          ▶ 홈 우상단 ● → 로그인/프로필<br/>
+          ▶ 맵: 검색 모달, 흰바탕 search input<br/>
+          ▶ 포스트: 흰/회 버튼, 매장 검색<br/>
+          ▶ 커뮤니티: 시/구 필터 + 글 상세<br/>
+          ▶ 비로그인 → 커뮤니티/글쓰기 게이트
+        </DCPostIt>
+      </DesignCanvas>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
