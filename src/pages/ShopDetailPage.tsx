@@ -7,7 +7,6 @@ import BackButton from '@/components/ui/BackButton'
 import PostCard from '@/components/ui/PostCard'
 import { SHOPS, type Post } from '@/lib/data'
 import { gbStyles } from '@/lib/gbStyles'
-import { getDirectionsUrl } from '@/lib/kakao'
 import { supabase } from '@/lib/supabase'
 
 interface PostRow {
@@ -172,7 +171,7 @@ export default function ShopDetailPage() {
       >
         {/* 매장 정보 카드 */}
         <PixelBorder color="#111" bg="var(--paper-2)" padding={12}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <TypePin type={shop.type} size={20} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 700 }}>{shop.name}</div>
@@ -187,27 +186,6 @@ export default function ShopDetailPage() {
                 {shop.type} · {shop.addr}
               </div>
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <PixelButton
-              full
-              color="#111"
-              bg="var(--paper)"
-              onClick={() => navigate(`/post?shopId=${shop.id}`)}
-            >
-              ✎ 글쓰기
-            </PixelButton>
-            <PixelButton
-              full
-              color="#111"
-              bg="var(--red)"
-              fg="#FAFAF7"
-              onClick={() =>
-                window.open(getDirectionsUrl(shop), '_blank', 'noopener,noreferrer')
-              }
-            >
-              GO ▶
-            </PixelButton>
           </div>
         </PixelBorder>
 

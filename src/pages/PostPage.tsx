@@ -159,7 +159,13 @@ export default function PostPage() {
         return
       }
       setShowSuccess(true)
-      setTimeout(() => navigate('/community'), 1200)
+      // 폼 리셋 — 같은 페이지에서 다음 글 바로 쓸 수 있게
+      setBody('')
+      setStock('')
+      if (placeMode === 'new') {
+        setNewName('')
+        setNewAddr('')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -655,62 +661,82 @@ export default function PostPage() {
 
       <GBTabBar active="community" />
 
-      {/* 등록 성공 모달 */}
+      {/* 등록 성공 모달 — 탭바는 안 가리도록 bottom 여백 + 사용자 직접 닫기 */}
       {showSuccess && (
         <div
           style={{
             position: 'absolute',
-            inset: 0,
-            background: 'rgba(0,0,0,0.5)',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 60, // GBTabBar 영역 비워두기
+            background: 'rgba(0,0,0,0.4)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 100,
+            zIndex: 50,
+            padding: 16,
           }}
+          onClick={() => setShowSuccess(false)}
         >
-          <PixelBorder color="#111" bg="var(--paper)" padding={0}>
-            <div
-              style={{
-                padding: '24px 32px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 10,
-                minWidth: 220,
-              }}
-            >
+          <div onClick={(e) => e.stopPropagation()}>
+            <PixelBorder color="#111" bg="var(--paper)" padding={0}>
               <div
                 style={{
-                  width: 56,
-                  height: 56,
-                  border: '3px solid #111',
-                  background: '#1a8a3e',
-                  color: '#FAFAF7',
+                  padding: '24px 32px',
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 32,
-                  fontWeight: 700,
-                  boxShadow: '3px 3px 0 0 #111',
+                  gap: 12,
+                  minWidth: 240,
                 }}
               >
-                ✓
+                <div
+                  style={{
+                    width: 64,
+                    height: 64,
+                    border: '3px solid #111',
+                    background: '#1a8a3e',
+                    color: '#FAFAF7',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 38,
+                    fontWeight: 700,
+                    boxShadow: '3px 3px 0 0 #111',
+                  }}
+                >
+                  ✓
+                </div>
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 700,
+                    letterSpacing: 1,
+                    fontFamily: gbStyles.fontEn,
+                    color: '#1a8a3e',
+                  }}
+                >
+                  등록 완료!
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--ink-2)', textAlign: 'center', lineHeight: 1.5 }}>
+                  아래 탭바에서 커뮤니티로 이동하거나
+                  <br />
+                  계속 글을 쓸 수 있어요.
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <PixelButton
+                    sm
+                    color="#111"
+                    bg="var(--paper)"
+                    onClick={() => setShowSuccess(false)}
+                  >
+                    확인
+                  </PixelButton>
+                </div>
               </div>
-              <div
-                style={{
-                  fontSize: 16,
-                  fontWeight: 700,
-                  letterSpacing: 1,
-                  fontFamily: gbStyles.fontEn,
-                }}
-              >
-                등록 완료!
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--ink-2)' }}>
-                잠시 후 커뮤니티로 이동해요
-              </div>
-            </div>
-          </PixelBorder>
+            </PixelBorder>
+          </div>
         </div>
       )}
     </div>
