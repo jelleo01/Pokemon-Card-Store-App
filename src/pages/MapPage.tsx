@@ -19,6 +19,7 @@ import {
   type KakaoPlace,
   type LatLng,
 } from '@/lib/kakao'
+import { supabase } from '@/lib/supabase'
 
 // 서울 시청 근처를 디폴트로 (강남역보다 살짝 북쪽 — 수도권 매장 분포 중앙)
 const DEFAULT_CENTER: LatLng = { lat: 37.5547, lng: 126.9707 }
@@ -37,6 +38,7 @@ export default function MapPage() {
   const [visibleCount, setVisibleCount] = useState(30)
   const [placeResults, setPlaceResults] = useState<KakaoPlace[]>([])
   const [locating, setLocating] = useState(false)
+  const [newsCount, setNewsCount] = useState<Record<string, number>>({})
   const mapRef = useRef<KakaoMapHandle>(null)
 
   // mount 시 자동으로 현재 위치 시도. 실패 시 DEFAULT_CENTER 유지.
@@ -46,6 +48,35 @@ export default function MapPage() {
       .catch(() => {
         // 권한 거부/타임아웃 — 무시. 사용자가 "내 위치" 버튼으로 다시 시도 가능
       })
+  }, [])
+
+  // 매장별 글 수 fetch (마운트 시 1회). client SHOPS.id 와 매핑.
+  useEffect(() => {
+    let alive = true
+    supabase
+      .from('posts')
+      .select('shops(name, lat, lng)')
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          console.error('[news count fetch]', error)
+          return
+        }
+        const counts: Record<string, number> = {}
+        type Row = { shops: { name: string; lat: number; lng: number } | null }
+        for (const row of (data as unknown as Row[]) ?? []) {
+          const sh = row.shops
+          if (!sh) continue
+          const matched = SHOPS.find(
+            (s) => s.name === sh.name && s.lat === sh.lat && s.lng === sh.lng,
+          )
+          if (matched) counts[matched.id] = (counts[matched.id] ?? 0) + 1
+        }
+        setNewsCount(counts)
+      })
+    return () => {
+      alive = false
+    }
   }, [])
 
   // me 가 처음 set되면 지도도 자동으로 그쪽으로 이동
@@ -458,6 +489,35 @@ export default function MapPage() {
                     <Row k="위치" v={open.addr} />
                     <Row k="거리" v={`${open.dist}km`} />
                     <Row k="분류" v={open.type} />
+                    <Row k="재고" v="—" />
+                    <Row k="소식" v={`${newsCount[open.id] ?? 0}건`} />
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                      <PixelButton
+                        sm
+                        full
+                        color="#111"
+                        bg="var(--paper)"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigate(`/post?shopId=${open.id}`)
+                        }}
+                      >
+                        ✎ 수정하기
+                      </PixelButton>
+                      <PixelButton
+                        sm
+                        full
+                        color="#111"
+                        bg="var(--red)"
+                        fg="#FAFAF7"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigate(`/shop/${open.id}`)
+                        }}
+                      >
+                        더 자세히 ▶
+                      </PixelButton>
+                    </div>
                   </PixelBorder>
                 </div>
               )}

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import GBTabBar from '@/components/ui/GBTabBar'
 import PixelBorder from '@/components/ui/PixelBorder'
 import PixelButton from '@/components/ui/PixelButton'
@@ -12,22 +12,32 @@ import CategoryCard from '@/components/ui/CategoryCard'
 import Field from '@/components/ui/Field'
 import BackButton from '@/components/ui/BackButton'
 import KakaoMap from '@/components/ui/KakaoMap'
-import { SHOPS, SHOP_TYPES } from '@/lib/data'
+import { SHOPS, SHOP_TYPES, type ShopType } from '@/lib/data'
 import { gbStyles } from '@/lib/gbStyles'
 import type { LatLng } from '@/lib/kakao'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 
-const NEW_PIN_DEFAULT: LatLng = { lat: 37.5009, lng: 127.0367 }
+const NEW_PIN_DEFAULT: LatLng = { lat: 37.5547, lng: 126.9707 }
 
 type PlaceMode = 'existing' | 'new'
 type Category = '소식' | '질문'
 
+const TYPE_DB_MAP: Record<ShopType, string> = {
+  공식: 'cardshop',
+  카드샵: 'cardshop',
+  자판기: 'vending',
+  편의점: 'cvs',
+}
+
 export default function PostPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const [params] = useSearchParams()
+
+  const initialShopId = params.get('shopId') || SHOPS[0]?.id || ''
   const [placeMode, setPlace] = useState<PlaceMode>('existing')
-  const [shopId, setShopId] = useState<string>(SHOPS[0]?.id ?? '')
+  const [shopId, setShopId] = useState<string>(initialShopId)
   const [category, setCat] = useState<Category>('소식')
   const [stockTag, setStock] = useState('')
   const [body, setBody] = useState('')
@@ -35,37 +45,43 @@ export default function PostPage() {
   const [pickerQ, setPickerQ] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [showSuccess, setShowSuccess] = useState(false)
+
+  // 새 장소 모드 state
+  const [newName, setNewName] = useState('')
+  const [newAddr, setNewAddr] = useState('')
+  const [newType, setNewType] = useState<ShopType>('카드샵')
+  const [newCoord, setNewCoord] = useState<LatLng>(NEW_PIN_DEFAULT)
 
   const open = SHOPS.find((s) => s.id === shopId) ?? SHOPS[0]
   const stockTags = ['신상 박스 입고', '잔여 적음', '품절', '재입고 예정', '싱글 카드']
 
-  // 매장 id 가 PC-XXXX 형태(client seed) → DB shop_id 로 매핑 필요.
-  // 현재 SHOPS 는 client-only seed 라 Supabase shops 테이블에 없음.
-  // 베타: shops 테이블에 upsert 해서 uuid 받아온 뒤 그걸로 post.shop_id 채움.
-  async function ensureShopRow(): Promise<string | null> {
+  // ?shopId= 변경 시 동기화 (MapPage 의 수정하기 버튼)
+  useEffect(() => {
+    const q = params.get('shopId')
+    if (q) setShopId(q)
+  }, [params])
+
+  // 기존 매장 → DB row 보장 (이미 있으면 SELECT, 없으면 INSERT)
+  async function upsertExistingShop(): Promise<string | null> {
     if (!open) return null
-    // 동일한 (lat,lng) + name 조합으로 이미 있는지 조회
-    const { data: existing } = await supabase
+    const { data: existing, error: selErr } = await supabase
       .from('shops')
       .select('id')
       .eq('name', open.name)
       .eq('lat', open.lat)
       .eq('lng', open.lng)
       .maybeSingle()
+    if (selErr) {
+      console.error('[shop select]', selErr)
+    }
     if (existing) return existing.id
 
-    const typeMap: Record<string, string> = {
-      공식: 'cardshop',
-      카드샵: 'cardshop',
-      자판기: 'vending',
-      편의점: 'cvs',
-      팝업: 'popup',
-    }
     const { data: inserted, error } = await supabase
       .from('shops')
       .insert({
         name: open.name,
-        type: typeMap[open.type] ?? 'cardshop',
+        type: TYPE_DB_MAP[open.type] ?? 'cardshop',
         addr: open.addr,
         lat: open.lat,
         lng: open.lng,
@@ -75,10 +91,33 @@ export default function PostPage() {
       .select('id')
       .single()
     if (error) {
-      console.error('[shop upsert]', error)
+      console.error('[shop insert]', error)
       return null
     }
     return inserted.id
+  }
+
+  // 새 매장 INSERT
+  async function createNewShop(): Promise<string | null> {
+    const { data, error } = await supabase
+      .from('shops')
+      .insert({
+        name: newName.trim(),
+        type: TYPE_DB_MAP[newType] ?? 'cardshop',
+        addr: newAddr.trim() || '주소 미상',
+        lat: newCoord.lat,
+        lng: newCoord.lng,
+        verified: false,
+        created_by: user?.id ?? null,
+      })
+      .select('id')
+      .single()
+    if (error) {
+      console.error('[new shop insert]', error)
+      setErr(`매장 등록 실패: ${error.message}`)
+      return null
+    }
+    return data.id
   }
 
   async function handleSubmit() {
@@ -86,24 +125,25 @@ export default function PostPage() {
       setErr('로그인이 필요해요.')
       return
     }
-    if (placeMode === 'new') {
-      setErr('새 장소 등록은 베타 이후에 열릴 예정이에요.')
-      return
-    }
     if (body.trim().length < 5) {
       setErr('본문을 5자 이상 써주세요.')
       return
     }
-    if (!open) {
+    if (placeMode === 'new' && newName.trim().length < 2) {
+      setErr('새 매장 이름을 2자 이상 입력해주세요.')
+      return
+    }
+    if (placeMode === 'existing' && !open) {
       setErr('장소를 선택해주세요.')
       return
     }
     setErr(null)
     setSubmitting(true)
     try {
-      const shopUuid = await ensureShopRow()
+      const shopUuid =
+        placeMode === 'new' ? await createNewShop() : await upsertExistingShop()
       if (!shopUuid) {
-        setErr('매장 정보를 저장하지 못했어요.')
+        if (!err) setErr('매장 정보를 저장하지 못했어요.')
         return
       }
       const { error } = await supabase.from('posts').insert({
@@ -114,18 +154,27 @@ export default function PostPage() {
         tags: category === '소식' && stockTag ? [stockTag] : [],
       })
       if (error) {
-        setErr(error.message)
+        console.error('[post insert]', error)
+        setErr(`등록 실패: ${error.message}`)
         return
       }
-      navigate('/community')
+      setShowSuccess(true)
+      setTimeout(() => navigate('/community'), 1200)
     } finally {
       setSubmitting(false)
     }
   }
 
+  const mapCenter = useMemo<LatLng>(() => {
+    if (placeMode === 'new') return newCoord
+    if (open) return { lat: open.lat, lng: open.lng }
+    return NEW_PIN_DEFAULT
+  }, [placeMode, open, newCoord])
+
   return (
     <div
       style={{
+        position: 'relative',
         height: '100vh',
         display: 'flex',
         flexDirection: 'column',
@@ -191,23 +240,58 @@ export default function PostPage() {
             <div
               style={{
                 position: 'relative',
-                height: 100,
+                height: 160,
                 overflow: 'hidden',
                 background: '#EEECE2',
               }}
             >
               <KakaoMap
-                center={
-                  placeMode === 'existing' && open
-                    ? { lat: open.lat, lng: open.lng }
-                    : NEW_PIN_DEFAULT
-                }
-                level={4}
-                interactive={false}
+                center={mapCenter}
+                level={placeMode === 'new' ? 5 : 4}
+                interactive={placeMode === 'new'}
                 simplePins
                 shops={placeMode === 'existing' && open ? [open] : []}
-                newPin={placeMode === 'new' ? NEW_PIN_DEFAULT : null}
+                onIdle={
+                  placeMode === 'new'
+                    ? (c) => setNewCoord(c)
+                    : undefined
+                }
               />
+              {/* 새 장소 모드: 지도 정중앙 고정 핀 (CSS overlay) */}
+              {placeMode === 'new' && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -100%)',
+                    pointerEvents: 'none',
+                    fontSize: 26,
+                    lineHeight: 1,
+                    filter: 'drop-shadow(0 1px 0 #111)',
+                  }}
+                >
+                  📍
+                </div>
+              )}
+              {placeMode === 'new' && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 6,
+                    left: 6,
+                    right: 6,
+                    fontSize: 9,
+                    padding: '3px 6px',
+                    background: 'rgba(255,255,255,0.85)',
+                    border: '2px solid #111',
+                    textAlign: 'center',
+                    fontFamily: gbStyles.fontEn,
+                  }}
+                >
+                  지도를 움직여 핀 위치를 정해주세요
+                </div>
+              )}
             </div>
           </PixelBorder>
 
@@ -237,9 +321,9 @@ export default function PostPage() {
                   textAlign: 'left',
                 }}
               >
-                <TypePin type={open.type} size={14} />
+                <TypePin type={open?.type ?? '카드샵'} size={14} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700 }}>{open.name}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>{open?.name ?? '매장 선택'}</div>
                   <div
                     style={{
                       fontSize: 10,
@@ -247,7 +331,7 @@ export default function PostPage() {
                       fontFamily: gbStyles.fontEn,
                     }}
                   >
-                    {open.dist}km · {open.type} · {open.addr}
+                    {open ? `${open.type} · ${open.addr}` : ''}
                   </div>
                 </div>
                 <span
@@ -319,7 +403,7 @@ export default function PostPage() {
                               s.addr.includes(pickerQ) ||
                               s.type.includes(pickerQ),
                           )
-                        : SHOPS
+                        : SHOPS.slice(0, 50)
                       if (list.length === 0)
                         return (
                           <div
@@ -381,15 +465,6 @@ export default function PostPage() {
                               {s.addr}
                             </div>
                           </div>
-                          <span
-                            style={{
-                              fontSize: 9,
-                              opacity: 0.7,
-                              fontFamily: gbStyles.fontEn,
-                            }}
-                          >
-                            {s.dist}km
-                          </span>
                         </button>
                       ))
                     })()}
@@ -400,31 +475,54 @@ export default function PostPage() {
           ) : (
             <PixelBorder color="#111" bg="var(--paper-2)" padding={10}>
               <Field label="이름">
-                <PixelInput placeholder="예) 카드매니아 강남점" />
+                <PixelInput
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value.slice(0, 40))}
+                  placeholder="예) 카드매니아 강남점"
+                />
               </Field>
               <Field label="주소">
-                <PixelInput placeholder="지도에서 ▶ 핀 위치 지정" />
+                <PixelInput
+                  value={newAddr}
+                  onChange={(e) => setNewAddr(e.target.value.slice(0, 80))}
+                  placeholder="(선택) 도로명 주소"
+                />
               </Field>
               <Field label="분류">
                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {SHOP_TYPES.map((t, i) => (
-                    <span
-                      key={t}
-                      style={{
-                        fontSize: 9,
-                        padding: '3px 6px',
-                        border: '2px solid #111',
-                        background: i === 3 ? '#111' : 'var(--paper)',
-                        color: i === 3 ? '#FAFAF7' : '#111',
-                        letterSpacing: 1,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {t}
-                    </span>
-                  ))}
+                  {SHOP_TYPES.map((t) => {
+                    const on = newType === t
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => setNewType(t)}
+                        style={{
+                          fontSize: 9,
+                          padding: '3px 6px',
+                          border: '2px solid #111',
+                          background: on ? '#111' : 'var(--paper)',
+                          color: on ? '#FAFAF7' : '#111',
+                          letterSpacing: 1,
+                          cursor: 'pointer',
+                          fontFamily: gbStyles.font,
+                        }}
+                      >
+                        {t}
+                      </button>
+                    )
+                  })}
                 </div>
               </Field>
+              <div
+                style={{
+                  fontSize: 9,
+                  opacity: 0.6,
+                  marginTop: 6,
+                  fontFamily: gbStyles.fontEn,
+                }}
+              >
+                좌표: {newCoord.lat.toFixed(5)}, {newCoord.lng.toFixed(5)}
+              </div>
             </PixelBorder>
           )}
         </div>
@@ -489,7 +587,7 @@ export default function PostPage() {
           <PixelBorder color="#111" bg="var(--paper)" padding={0}>
             <textarea
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={(e) => setBody(e.target.value.slice(0, 280))}
               placeholder={
                 category === '소식'
                   ? '예) 오늘 14시쯤 신상 박스 12개 입고됐어요. 1인 2박스 제한이래요.'
@@ -556,6 +654,65 @@ export default function PostPage() {
       </div>
 
       <GBTabBar active="community" />
+
+      {/* 등록 성공 모달 */}
+      {showSuccess && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+          }}
+        >
+          <PixelBorder color="#111" bg="var(--paper)" padding={0}>
+            <div
+              style={{
+                padding: '24px 32px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 10,
+                minWidth: 220,
+              }}
+            >
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  border: '3px solid #111',
+                  background: '#1a8a3e',
+                  color: '#FAFAF7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 32,
+                  fontWeight: 700,
+                  boxShadow: '3px 3px 0 0 #111',
+                }}
+              >
+                ✓
+              </div>
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  fontFamily: gbStyles.fontEn,
+                }}
+              >
+                등록 완료!
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--ink-2)' }}>
+                잠시 후 커뮤니티로 이동해요
+              </div>
+            </div>
+          </PixelBorder>
+        </div>
+      )}
     </div>
   )
 }

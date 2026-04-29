@@ -10,12 +10,14 @@ import PostPage from '@/pages/PostPage'
 import CommunityPage from '@/pages/CommunityPage'
 import PostDetailPage from '@/pages/PostDetailPage'
 import ProfilePage from '@/pages/ProfilePage'
+import ShopDetailPage from '@/pages/ShopDetailPage'
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/map" element={<MapPage />} />
+      <Route path="/shop/:id" element={<ShopDetailPage />} />
       <Route path="/location" element={<LocationSearchPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />

@@ -39,6 +39,8 @@ interface KakaoMapProps {
   simplePins?: boolean
   onPinClick?: (id: string) => void
   onMeClick?: () => void
+  /** Fired after the user finishes panning/zooming. Use to read map center. */
+  onIdle?: (center: LatLng) => void
   style?: CSSProperties
 }
 
@@ -54,6 +56,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
     simplePins = false,
     onPinClick,
     onMeClick,
+    onIdle,
     style,
   },
   ref,
@@ -107,6 +110,28 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
     if (!map) return
     map.setCenter(new kakao.maps.LatLng(center.lat, center.lng))
   }, [center.lat, center.lng])
+
+  // interactive prop 동적 반영 (PostPage 의 placeMode 토글).
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    map.setDraggable(interactive)
+    map.setZoomable(interactive)
+  }, [interactive])
+
+  // 지도가 멈춘 시점에 중심 좌표 콜백 — 새 장소 모드용.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !onIdle) return
+    const handler = () => {
+      const c = map.getCenter()
+      onIdle({ lat: c.getLat(), lng: c.getLng() })
+    }
+    kakao.maps.event.addListener(map, 'idle', handler)
+    return () => {
+      kakao.maps.event.removeListener(map, 'idle', handler)
+    }
+  }, [onIdle])
 
   // Shop pins
   useEffect(() => {

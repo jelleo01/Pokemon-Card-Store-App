@@ -55,6 +55,11 @@ declare global {
 
     function load(callback: () => void): void
 
+    namespace event {
+      function addListener(target: unknown, type: string, handler: () => void): void
+      function removeListener(target: unknown, type: string, handler: () => void): void
+    }
+
     namespace services {
       class Geocoder {
         addressSearch(
