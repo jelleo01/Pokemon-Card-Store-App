@@ -1,57 +1,116 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import type { Session } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase'
 
 export interface TrainerUser {
-  id: string
-  phone: string
-  region: string
+  id: string                   // auth.users.id (uuid)
+  email: string
+  trainerId: string | null     // null = 온보딩 필요
+  city: string | null
+  district: string | null
+  phone: string | null
+  notifNews: boolean
+  notifComment: boolean
+  marketingOptIn: boolean
 }
 
 interface AuthContextValue {
   user: TrainerUser | null
+  session: Session | null
   loading: boolean
-  signIn: (user: TrainerUser) => void
-  signOut: () => void
-  updateUser: (patch: Partial<TrainerUser>) => void
+  signInWithGoogle: () => Promise<void>
+  signOut: () => Promise<void>
+  refresh: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
-const STORAGE_KEY = 'trainer_user'
+
+async function fetchProfile(session: Session): Promise<TrainerUser> {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('trainer_id, phone, city, district, notif_news, notif_comment, marketing_opt_in')
+    .eq('id', session.user.id)
+    .maybeSingle()
+
+  return {
+    id: session.user.id,
+    email: session.user.email || '',
+    trainerId: profile?.trainer_id ?? null,
+    phone: profile?.phone ?? null,
+    city: profile?.city ?? null,
+    district: profile?.district ?? null,
+    notifNews: profile?.notif_news ?? true,
+    notifComment: profile?.notif_comment ?? true,
+    marketingOptIn: profile?.marketing_opt_in ?? false,
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<TrainerUser | null>(null)
+  const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) setUser(JSON.parse(raw) as TrainerUser)
-    } catch {
-      // ignore
+  const loadSession = useCallback(async (s: Session | null) => {
+    if (!s) {
+      setSession(null)
+      setUser(null)
+      return
     }
-    setLoading(false)
+    setSession(s)
+    try {
+      const u = await fetchProfile(s)
+      setUser(u)
+    } catch (err) {
+      console.error('[Auth] fetchProfile failed', err)
+      setUser(null)
+    }
   }, [])
 
-  function signIn(next: TrainerUser) {
-    setUser(next)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-  }
-
-  function signOut() {
-    setUser(null)
-    localStorage.removeItem(STORAGE_KEY)
-  }
-
-  function updateUser(patch: Partial<TrainerUser>) {
-    setUser((prev) => {
-      if (!prev) return prev
-      const next = { ...prev, ...patch }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      return next
+  useEffect(() => {
+    let mounted = true
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return
+      loadSession(data.session).finally(() => {
+        if (mounted) setLoading(false)
+      })
     })
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      if (!mounted) return
+      loadSession(s)
+    })
+    return () => {
+      mounted = false
+      sub.subscription.unsubscribe()
+    }
+  }, [loadSession])
+
+  async function signInWithGoogle() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin + '/',
+      },
+    })
+    if (error) throw error
   }
+
+  async function signOut() {
+    await supabase.auth.signOut()
+    setUser(null)
+    setSession(null)
+  }
+
+  const refresh = useCallback(async () => {
+    if (!session) return
+    const u = await fetchProfile(session)
+    setUser(u)
+  }, [session])
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut, updateUser }}>
+    <AuthContext.Provider
+      value={{ user, session, loading, signInWithGoogle, signOut, refresh }}
+    >
       {children}
     </AuthContext.Provider>
   )

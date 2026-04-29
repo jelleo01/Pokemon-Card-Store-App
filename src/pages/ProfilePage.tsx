@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PixelBorder from '@/components/ui/PixelBorder'
 import PixelButton from '@/components/ui/PixelButton'
@@ -6,38 +6,77 @@ import Sprite from '@/components/ui/Sprite'
 import EditableRow from '@/components/ui/EditableRow'
 import BackButton from '@/components/ui/BackButton'
 import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
 import { COMMUNITY } from '@/lib/data'
 import { gbStyles } from '@/lib/gbStyles'
 
 interface ProfileShape {
-  id: string
+  trainerId: string
   phone: string
-  region: string
+  city: string
+  district: string
   notify: string
+}
+
+function regionLabel(city: string | null, district: string | null) {
+  if (!city) return ''
+  return district ? `${city} ${district}` : city
 }
 
 export default function ProfilePage() {
   const navigate = useNavigate()
-  const { user, signOut, updateUser } = useAuth()
+  const { user, signOut, refresh } = useAuth()
   const [editing, setEditing] = useState(false)
-  const [profile, setProfile] = useState<ProfileShape>({
-    id: user?.id || '피카츄러버',
-    phone: user?.phone || '010-1234-5678',
-    region: user?.region || '서울 강남구 역삼동',
-    notify: '신상 입고, 댓글 ON',
-  })
+  const [saving, setSaving] = useState(false)
+  const [profile, setProfile] = useState<ProfileShape>(() => ({
+    trainerId: user?.trainerId || '',
+    phone: user?.phone || '',
+    city: user?.city || '',
+    district: user?.district || '',
+    notify: user?.notifNews || user?.notifComment ? '신상 입고, 댓글 ON' : '알림 OFF',
+  }))
+
+  // user가 로딩 후에 들어왔을 때 동기화
+  useEffect(() => {
+    if (!user) return
+    setProfile({
+      trainerId: user.trainerId || '',
+      phone: user.phone || '',
+      city: user.city || '',
+      district: user.district || '',
+      notify: user.notifNews || user.notifComment ? '신상 입고, 댓글 ON' : '알림 OFF',
+    })
+  }, [user])
+
   const set = (k: keyof ProfileShape, v: string) =>
     setProfile((p) => ({ ...p, [k]: v }))
 
-  function toggleEdit() {
+  async function toggleEdit() {
+    if (!user) return
     if (editing) {
-      updateUser({ id: profile.id, phone: profile.phone, region: profile.region })
+      // 저장
+      setSaving(true)
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          trainer_id: profile.trainerId,
+          phone: profile.phone || null,
+          city: profile.city || null,
+          district: profile.district || null,
+        })
+        .eq('id', user.id)
+      setSaving(false)
+      if (error) {
+        alert(error.message)
+        return
+      }
+      await refresh()
     }
     setEditing((e) => !e)
   }
 
-  function handleLogout() {
-    signOut()
+  async function handleLogout() {
+    await signOut()
     navigate('/')
   }
 
@@ -79,8 +118,9 @@ export default function ProfilePage() {
             bg={editing ? 'var(--red)' : 'var(--paper)'}
             fg={editing ? '#FAFAF7' : '#111'}
             onClick={toggleEdit}
+            disabled={saving}
           >
-            {editing ? '✓ 저장' : '✎ 편집'}
+            {saving ? '...' : editing ? '✓ 저장' : '✎ 편집'}
           </PixelButton>
         </div>
       </div>
@@ -157,8 +197,8 @@ export default function ProfilePage() {
               </div>
               {editing ? (
                 <input
-                  value={profile.id}
-                  onChange={(e) => set('id', e.target.value.slice(0, 12))}
+                  value={profile.trainerId}
+                  onChange={(e) => set('trainerId', e.target.value.slice(0, 12))}
                   style={{
                     marginTop: 2,
                     width: '100%',
@@ -174,10 +214,12 @@ export default function ProfilePage() {
                   }}
                 />
               ) : (
-                <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>{profile.id}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>
+                  {profile.trainerId || '?????'}
+                </div>
               )}
               <div style={{ fontSize: 10, marginTop: 4, opacity: 0.85 }}>
-                가입 2026.04.10 · LV.3
+                {user?.email || ''}
               </div>
             </div>
           </div>
@@ -186,9 +228,9 @@ export default function ProfilePage() {
         {/* Stats strip */}
         <div style={{ display: 'flex', gap: 8 }}>
           {[
-            { k: '쓴 글', v: '7' },
-            { k: '하트', v: '48' },
-            { k: '댓글', v: '15' },
+            { k: '쓴 글', v: '0' },
+            { k: '하트', v: '0' },
+            { k: '댓글', v: '0' },
           ].map((s) => (
             <PixelBorder
               key={s.k}
@@ -233,21 +275,25 @@ export default function ProfilePage() {
           </div>
           <EditableRow
             k="아이디"
-            v={profile.id}
+            v={profile.trainerId}
             editing={editing}
-            onChange={(v) => set('id', v)}
+            onChange={(v) => set('trainerId', v)}
           />
           <EditableRow
             k="번호"
-            v={profile.phone}
+            v={profile.phone || '미등록'}
             editing={editing}
             onChange={(v) => set('phone', v)}
           />
           <EditableRow
             k="지역"
-            v={profile.region}
+            v={editing ? `${profile.city} ${profile.district}`.trim() : (regionLabel(profile.city, profile.district) || '미등록')}
             editing={editing}
-            onChange={(v) => set('region', v)}
+            onChange={(v) => {
+              const [c, ...rest] = v.split(' ')
+              set('city', c || '')
+              set('district', rest.join(' '))
+            }}
           />
           <EditableRow
             k="알림"

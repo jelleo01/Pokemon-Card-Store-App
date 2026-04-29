@@ -81,7 +81,7 @@ export default function HomePage() {
             letterSpacing: 1,
           }}
         >
-          ※ {user ? `${user.id} · 카드 판매점 찾기` : '카드 판매점 찾기 · 로그인 시 커뮤니티 가능'}
+          ※ {user?.trainerId ? `${user.trainerId} · 카드 판매점 찾기` : '카드 판매점 찾기 · 로그인 시 커뮤니티 가능'}
         </div>
       </div>
 

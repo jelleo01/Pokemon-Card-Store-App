@@ -4,6 +4,7 @@ import HomePage from '@/pages/HomePage'
 import MapPage from '@/pages/MapPage'
 import LocationSearchPage from '@/pages/LocationSearchPage'
 import LoginPage from '@/pages/LoginPage'
+import OnboardingPage from '@/pages/OnboardingPage'
 import AuthWallPage from '@/pages/AuthWallPage'
 import PostPage from '@/pages/PostPage'
 import CommunityPage from '@/pages/CommunityPage'
@@ -17,6 +18,7 @@ export default function App() {
       <Route path="/map" element={<MapPage />} />
       <Route path="/location" element={<LocationSearchPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/auth-wall" element={<AuthWallPage />} />
       <Route element={<RequireAuth />}>
         <Route path="/post" element={<PostPage />} />

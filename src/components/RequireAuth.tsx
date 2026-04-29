@@ -7,10 +7,21 @@ export default function RequireAuth() {
 
   if (loading) return null
 
+  const here = location.pathname + location.search
+
   if (!user) {
     return (
       <Navigate
-        to={`/auth-wall?redirect=${encodeURIComponent(location.pathname + location.search)}`}
+        to={`/auth-wall?redirect=${encodeURIComponent(here)}`}
+        replace
+      />
+    )
+  }
+
+  if (!user.trainerId) {
+    return (
+      <Navigate
+        to={`/onboarding?redirect=${encodeURIComponent(here)}`}
         replace
       />
     )
