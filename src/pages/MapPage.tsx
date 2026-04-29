@@ -153,7 +153,7 @@ export default function MapPage() {
             MAP
           </div>
           <div style={{ flex: 1 }} />
-          <div style={{ fontSize: 10, letterSpacing: 1 }}>강남 · 거리순</div>
+          <div style={{ fontSize: 10, letterSpacing: 1, opacity: 0.6 }}>거리순</div>
         </div>
         <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
           <button
@@ -191,7 +191,7 @@ export default function MapPage() {
       <div
         style={{
           position: 'relative',
-          height: 220,
+          height: 190,
           borderBottom: '2px solid #111',
           overflow: 'hidden',
           background: '#EEECE2',
@@ -415,7 +415,7 @@ export default function MapPage() {
                           fontFamily: gbStyles.fontEn,
                         }}
                       >
-                        {s.dist}km · {s.type} · stock:{s.stockLevel}
+                        {s.dist}km · {s.type}
                       </div>
                     </div>
                     <div
@@ -458,17 +458,6 @@ export default function MapPage() {
                     <Row k="위치" v={open.addr} />
                     <Row k="거리" v={`${open.dist}km`} />
                     <Row k="분류" v={open.type} />
-                    <Row k="UPDATE" v={open.update} />
-                    <Row k="재고" v={open.stock} />
-                    <Row k="소식" v={`${open.newsCount}건`} />
-                    <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                      <PixelButton sm full color="#111" bg="var(--paper)">
-                        ✎ 수정 제안
-                      </PixelButton>
-                      <PixelButton sm full color="#111" bg="var(--red)" fg="#FAFAF7">
-                        더 자세히 ▶
-                      </PixelButton>
-                    </div>
                   </PixelBorder>
                 </div>
               )}

@@ -1,34 +1,98 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import GBTabBar from '@/components/ui/GBTabBar'
 import PixelButton from '@/components/ui/PixelButton'
 import Sprite from '@/components/ui/Sprite'
 import PostCard from '@/components/ui/PostCard'
-import { COMMUNITY, REGIONS } from '@/lib/data'
+import type { Post } from '@/lib/data'
+import { REGIONS } from '@/lib/data'
 import { gbStyles } from '@/lib/gbStyles'
+import { supabase } from '@/lib/supabase'
 
 type Filter = 'latest' | 'near' | 'find'
+
+interface PostRow {
+  id: string
+  body: string
+  category: 'news' | 'ask'
+  hearts_count: number
+  comments_count: number
+  created_at: string
+  profiles: { trainer_id: string } | null
+  shops: { name: string; city: string | null; district: string | null; dong: string | null } | null
+}
+
+function minsAgo(iso: string): number {
+  const diffMs = Date.now() - new Date(iso).getTime()
+  return Math.max(0, Math.round(diffMs / 60000))
+}
+
+function rowToPost(r: PostRow): Post {
+  const firstLine = r.body.split('\n')[0]
+  const t = firstLine.length > 40 ? firstLine.slice(0, 40) + '…' : firstLine
+  return {
+    id: r.id,
+    who: r.profiles?.trainer_id ?? '익명',
+    loc: r.shops?.district ?? r.shops?.city ?? '미지정',
+    dong: r.shops?.dong ?? '',
+    t,
+    body: r.body,
+    tag: r.category === 'news' ? '소식' : '질문',
+    mins: minsAgo(r.created_at),
+    hearts: r.hearts_count ?? 0,
+    comments: Array.from({ length: r.comments_count ?? 0 }, () => ({
+      who: '',
+      t: '',
+      mins: 0,
+    })),
+  }
+}
 
 export default function CommunityPage() {
   const navigate = useNavigate()
   const [filter, setFil] = useState<Filter>('latest')
   const [city, setCity] = useState('전체')
   const [district, setDistrict] = useState('전체')
+  const [allPosts, setAllPosts] = useState<Post[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const allPosts = COMMUNITY
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    supabase
+      .from('posts')
+      .select(
+        'id, body, category, hearts_count, comments_count, created_at, profiles(trainer_id), shops(name, city, district, dong)',
+      )
+      .order('created_at', { ascending: false })
+      .limit(100)
+      .then(({ data, error }) => {
+        if (!alive) return
+        setLoading(false)
+        if (error) {
+          console.error('[community fetch]', error)
+          return
+        }
+        setAllPosts((data as unknown as PostRow[]).map(rowToPost))
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
-  const cityFiltered =
-    filter === 'near'
-      ? allPosts.filter((p) => {
-          if (
-            city !== '전체' &&
-            !REGIONS.find((r) => r.city === city)?.districts.includes(p.loc)
-          )
-            return false
-          if (district !== '전체' && p.loc !== district) return false
-          return true
-        })
-      : allPosts
+  const cityFiltered = useMemo(
+    () =>
+      filter === 'near'
+        ? allPosts.filter((p) => {
+            if (city === '전체') return true
+            const reg = REGIONS.find((r) => r.city === city)
+            if (!reg) return true
+            if (district !== '전체') return p.loc === district
+            return reg.districts.includes(p.loc) || p.loc === city
+          })
+        : allPosts,
+    [allPosts, filter, city, district],
+  )
 
   const feed =
     filter === 'find'
@@ -242,10 +306,7 @@ export default function CommunityPage() {
           minHeight: 0,
         }}
       >
-        {feed.map((p) => (
-          <PostCard key={p.id} p={p} onClick={() => navigate(`/post/${p.id}`)} />
-        ))}
-        {feed.length === 0 && (
+        {loading ? (
           <div
             style={{
               padding: 24,
@@ -254,41 +315,62 @@ export default function CommunityPage() {
               color: 'var(--ink-2)',
             }}
           >
-            해당 지역에 글이 아직 없어요.
+            불러오는 중...
           </div>
-        )}
-
-        {filter === 'latest' && (
+        ) : (
           <>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                marginTop: 6,
-              }}
-            >
-              <div style={{ flex: 1, height: 2, background: '#111' }} />
+            {feed.map((p) => (
+              <PostCard key={p.id} p={p} onClick={() => navigate(`/post/${p.id}`)} />
+            ))}
+            {feed.length === 0 && (
               <div
                 style={{
-                  fontSize: 10,
-                  letterSpacing: 2,
-                  fontFamily: gbStyles.fontEn,
-                  fontWeight: 700,
+                  padding: 24,
+                  textAlign: 'center',
+                  fontSize: 11,
+                  color: 'var(--ink-2)',
+                  lineHeight: 1.6,
                 }}
               >
-                ? 질문 / Q&amp;A
+                아직 글이 없어요.
+                <br />
+                첫 글의 주인공이 되어보세요!
               </div>
-              <div style={{ flex: 1, height: 2, background: '#111' }} />
-            </div>
-            {questions.slice(0, 2).map((p) => (
-              <PostCard
-                key={'q-' + p.id}
-                p={p}
-                compact
-                onClick={() => navigate(`/post/${p.id}`)}
-              />
-            ))}
+            )}
+
+            {filter === 'latest' && questions.length > 0 && (
+              <>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    marginTop: 6,
+                  }}
+                >
+                  <div style={{ flex: 1, height: 2, background: '#111' }} />
+                  <div
+                    style={{
+                      fontSize: 10,
+                      letterSpacing: 2,
+                      fontFamily: gbStyles.fontEn,
+                      fontWeight: 700,
+                    }}
+                  >
+                    ? 질문 / Q&amp;A
+                  </div>
+                  <div style={{ flex: 1, height: 2, background: '#111' }} />
+                </div>
+                {questions.slice(0, 2).map((p) => (
+                  <PostCard
+                    key={'q-' + p.id}
+                    p={p}
+                    compact
+                    onClick={() => navigate(`/post/${p.id}`)}
+                  />
+                ))}
+              </>
+            )}
           </>
         )}
 

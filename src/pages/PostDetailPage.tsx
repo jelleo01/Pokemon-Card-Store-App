@@ -1,23 +1,188 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import PixelBorder from '@/components/ui/PixelBorder'
 import PixelButton from '@/components/ui/PixelButton'
 import Sprite from '@/components/ui/Sprite'
 import BackButton from '@/components/ui/BackButton'
-import { COMMUNITY, type Comment } from '@/lib/data'
 import { gbStyles } from '@/lib/gbStyles'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
+
+interface PostDetail {
+  id: string
+  body: string
+  category: 'news' | 'ask'
+  hearts_count: number
+  created_at: string
+  who: string
+  loc: string
+  dong: string
+  shop_name: string
+}
+
+interface CommentRow {
+  id: string
+  body: string
+  created_at: string
+  user_id: string
+  profiles: { trainer_id: string } | null
+}
+
+function minsAgo(iso: string): number {
+  return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+}
 
 export default function PostDetailPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { id } = useParams()
-  const post = COMMUNITY.find((p) => p.id === id)
 
+  const [post, setPost] = useState<PostDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
+  const [comments, setComments] = useState<CommentRow[]>([])
   const [hearted, setHeart] = useState(false)
+  const [hearts, setHearts] = useState(0)
   const [draft, setDraft] = useState('')
-  const [hearts, setHearts] = useState(post?.hearts || 0)
-  const [comments, setComments] = useState<Comment[]>(post?.comments || [])
+  const [submitting, setSubmitting] = useState(false)
 
-  if (!post) {
+  useEffect(() => {
+    if (!id) return
+    let alive = true
+    setLoading(true)
+    supabase
+      .from('posts')
+      .select(
+        'id, body, category, hearts_count, created_at, profiles(trainer_id), shops(name, city, district, dong)',
+      )
+      .eq('id', id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!alive) return
+        setLoading(false)
+        if (error || !data) {
+          setNotFound(true)
+          return
+        }
+        const row = data as unknown as {
+          id: string
+          body: string
+          category: 'news' | 'ask'
+          hearts_count: number
+          created_at: string
+          profiles: { trainer_id: string } | null
+          shops: {
+            name: string
+            city: string | null
+            district: string | null
+            dong: string | null
+          } | null
+        }
+        setPost({
+          id: row.id,
+          body: row.body,
+          category: row.category,
+          hearts_count: row.hearts_count ?? 0,
+          created_at: row.created_at,
+          who: row.profiles?.trainer_id ?? '익명',
+          loc: row.shops?.district ?? row.shops?.city ?? '',
+          dong: row.shops?.dong ?? '',
+          shop_name: row.shops?.name ?? '',
+        })
+        setHearts(row.hearts_count ?? 0)
+      })
+    return () => {
+      alive = false
+    }
+  }, [id])
+
+  useEffect(() => {
+    if (!id) return
+    let alive = true
+    supabase
+      .from('comments')
+      .select('id, body, created_at, user_id, profiles(trainer_id)')
+      .eq('post_id', id)
+      .order('created_at', { ascending: true })
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          console.error('[comments fetch]', error)
+          return
+        }
+        setComments((data as unknown as CommentRow[]) ?? [])
+      })
+    return () => {
+      alive = false
+    }
+  }, [id])
+
+  // 내가 누른 좋아요 여부 fetch
+  useEffect(() => {
+    if (!id || !user) return
+    let alive = true
+    supabase
+      .from('hearts')
+      .select('post_id')
+      .eq('post_id', id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!alive) return
+        setHeart(!!data)
+      })
+    return () => {
+      alive = false
+    }
+  }, [id, user])
+
+  async function toggleHeart() {
+    if (!id || !user) return
+    if (hearted) {
+      setHeart(false)
+      setHearts((h) => Math.max(0, h - 1))
+      const { error } = await supabase
+        .from('hearts')
+        .delete()
+        .eq('post_id', id)
+        .eq('user_id', user.id)
+      if (error) {
+        setHeart(true)
+        setHearts((h) => h + 1)
+      }
+    } else {
+      setHeart(true)
+      setHearts((h) => h + 1)
+      const { error } = await supabase
+        .from('hearts')
+        .insert({ post_id: id, user_id: user.id })
+      if (error) {
+        setHeart(false)
+        setHearts((h) => Math.max(0, h - 1))
+      }
+    }
+  }
+
+  async function submitComment() {
+    if (!id || !user) return
+    const text = draft.trim()
+    if (!text) return
+    setSubmitting(true)
+    const { data, error } = await supabase
+      .from('comments')
+      .insert({ post_id: id, user_id: user.id, body: text })
+      .select('id, body, created_at, user_id, profiles(trainer_id)')
+      .single()
+    setSubmitting(false)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    setComments((cs) => [...cs, data as unknown as CommentRow])
+    setDraft('')
+  }
+
+  if (loading) {
     return (
       <div
         style={{
@@ -29,12 +194,38 @@ export default function PostDetailPage() {
           color: 'var(--ink-2)',
         }}
       >
-        글을 찾을 수 없어요.
+        불러오는 중...
       </div>
     )
   }
 
-  const isAsk = post.tag === '질문'
+  if (notFound || !post) {
+    return (
+      <div
+        style={{
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+          fontFamily: gbStyles.font,
+          color: 'var(--ink-2)',
+        }}
+      >
+        글을 찾을 수 없어요.
+        <PixelButton color="#111" bg="var(--paper)" onClick={() => navigate('/community')}>
+          ◀ 커뮤니티로
+        </PixelButton>
+      </div>
+    )
+  }
+
+  const isAsk = post.category === 'ask'
+  const title =
+    post.body.split('\n')[0].length > 40
+      ? post.body.split('\n')[0].slice(0, 40) + '…'
+      : post.body.split('\n')[0]
 
   return (
     <div
@@ -63,28 +254,17 @@ export default function PostDetailPage() {
               fontWeight: 700,
               letterSpacing: 1,
               fontFamily: gbStyles.fontEn,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}
           >
-            POST
+            {post.shop_name || 'POST'}
           </div>
-          <div style={{ flex: 1 }} />
-          <button
-            style={{
-              background: 'transparent',
-              border: '2px solid #111',
-              padding: '4px 8px',
-              cursor: 'pointer',
-              fontFamily: gbStyles.font,
-              fontSize: 10,
-            }}
-          >
-            ⋯
-          </button>
         </div>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-        {/* Body */}
         <div style={{ padding: 14, borderBottom: '2px solid #111' }}>
           <div
             style={{
@@ -108,7 +288,8 @@ export default function PostDetailPage() {
               {isAsk ? '? 질문' : '★ 소식'}
             </span>
             <span style={{ fontSize: 10, color: 'var(--ink-2)' }}>
-              {post.loc} · {post.dong}
+              {post.loc}
+              {post.dong ? ' · ' + post.dong : ''}
             </span>
             <div style={{ flex: 1 }} />
             <span
@@ -118,14 +299,14 @@ export default function PostDetailPage() {
                 fontFamily: gbStyles.fontEn,
               }}
             >
-              {post.mins}m
+              {minsAgo(post.created_at)}m
             </span>
           </div>
           <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.4, marginBottom: 6 }}>
-            {post.t}
+            {title}
           </div>
-          <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--ink-2)' }}>
-            {post.body || '(본문이 없습니다.)'}
+          <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--ink-2)', whiteSpace: 'pre-wrap' }}>
+            {post.body}
           </div>
           <div
             style={{
@@ -152,16 +333,14 @@ export default function PostDetailPage() {
             <span style={{ fontWeight: 700 }}>{post.who}</span>
             <div style={{ flex: 1 }} />
             <button
-              onClick={() => {
-                setHeart((h) => !h)
-                setHearts((h) => (hearted ? h - 1 : h + 1))
-              }}
+              onClick={toggleHeart}
+              disabled={!user}
               style={{
                 padding: '4px 10px',
                 border: '2px solid #111',
                 background: hearted ? 'var(--red)' : 'var(--paper)',
                 color: hearted ? '#FAFAF7' : '#111',
-                cursor: 'pointer',
+                cursor: user ? 'pointer' : 'not-allowed',
                 fontFamily: gbStyles.font,
                 fontSize: 11,
                 fontWeight: 700,
@@ -189,7 +368,6 @@ export default function PostDetailPage() {
           </div>
         </div>
 
-        {/* Comments */}
         <div style={{ padding: 14 }}>
           <div
             style={{
@@ -203,8 +381,8 @@ export default function PostDetailPage() {
             COMMENTS · {comments.length}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {comments.map((c, i) => (
-              <PixelBorder key={i} color="#111" bg="var(--paper-2)" padding={0}>
+            {comments.map((c) => (
+              <PixelBorder key={c.id} color="#111" bg="var(--paper-2)" padding={0}>
                 <div style={{ padding: '8px 10px' }}>
                   <div
                     style={{
@@ -215,7 +393,9 @@ export default function PostDetailPage() {
                       fontSize: 10,
                     }}
                   >
-                    <span style={{ fontWeight: 700 }}>{c.who}</span>
+                    <span style={{ fontWeight: 700 }}>
+                      {c.profiles?.trainer_id ?? '익명'}
+                    </span>
                     <div style={{ flex: 1 }} />
                     <span
                       style={{
@@ -223,22 +403,10 @@ export default function PostDetailPage() {
                         fontFamily: gbStyles.fontEn,
                       }}
                     >
-                      {c.mins}m
+                      {minsAgo(c.created_at)}m
                     </span>
                   </div>
-                  <div style={{ fontSize: 12, lineHeight: 1.5 }}>{c.t}</div>
-                  <div
-                    style={{
-                      marginTop: 4,
-                      display: 'flex',
-                      gap: 10,
-                      fontSize: 9,
-                      color: 'var(--ink-2)',
-                    }}
-                  >
-                    <span style={{ cursor: 'pointer' }}>♡ 0</span>
-                    <span style={{ cursor: 'pointer' }}>답글</span>
-                  </div>
+                  <div style={{ fontSize: 12, lineHeight: 1.5 }}>{c.body}</div>
                 </div>
               </PixelBorder>
             ))}
@@ -259,7 +427,6 @@ export default function PostDetailPage() {
         <div style={{ height: 8 }} />
       </div>
 
-      {/* Comment composer */}
       <div
         style={{
           borderTop: '2px solid #111',
@@ -273,7 +440,14 @@ export default function PostDetailPage() {
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="댓글 달기..."
+          placeholder={user ? '댓글 달기...' : '로그인이 필요해요'}
+          disabled={!user}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              submitComment()
+            }
+          }}
           style={{
             flex: 1,
             padding: '6px 10px',
@@ -290,13 +464,10 @@ export default function PostDetailPage() {
           color="#111"
           bg="var(--red)"
           fg="#FAFAF7"
-          onClick={() => {
-            if (!draft.trim()) return
-            setComments((cs) => [...cs, { who: '나', t: draft, mins: 0 }])
-            setDraft('')
-          }}
+          onClick={submitComment}
+          disabled={!user || submitting || !draft.trim()}
         >
-          등록
+          {submitting ? '...' : '등록'}
         </PixelButton>
       </div>
     </div>

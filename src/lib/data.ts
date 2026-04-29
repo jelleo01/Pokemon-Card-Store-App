@@ -58,19 +58,16 @@ const MOCK_SHOPS: Shop[] = [
   { id: 'PC-006', name: '레어덱 카드샵',       dist: 1.9, type: '카드샵', stock: '구판 위주, 신상은 1박스',     stockLevel: 'Low',  newsCount: 2, x: 80, y: 28, lat: 37.5101, lng: 127.0395, hours: '10:00 – 19:00', addr: '논현동 45',         update: '2026.04.25' },
 ]
 
-// 크롤링한 seed가 있으면 그것을, 없으면 mock 6개 사용 (개발 fallback)
-export const SHOPS: Shop[] = SEED_SHOPS.length > 0 ? SEED_SHOPS : MOCK_SHOPS
+// 크롤링한 seed가 있으면 그것을, 없으면 mock 6개 사용 (개발 fallback).
+// 베타: stock(재고 텍스트)은 분류와 동일한 모킹 값이라 비워둠 — 사용자가 글로 입력.
+export const SHOPS: Shop[] = (SEED_SHOPS.length > 0 ? SEED_SHOPS : MOCK_SHOPS).map((s) => ({
+  ...s,
+  stock: '',
+  newsCount: 0,
+}))
 
-export const COMMUNITY: Post[] = [
-  { id: 'q1', who: '트레이너#0421', loc: '강남구', dong: '역삼동', t: '카드월드 강남점에 신상 박스 들어왔어요!', body: '오늘 14시쯤 신상 박스 12개 입고됐습니다. 1인 2박스 제한이고, 5시까지는 절반 정도 남아있었어요. 가실 분들 참고하세요!', tag: '소식', mins: 4, hearts: 12, comments: [
-    { who: '트레이너#0099', t: '감사해요! 지금 출발합니다 🏃', mins: 2 },
-    { who: '트레이너#3311', t: '저도 다녀왔는데 아직 4박스 남아있었어요', mins: 1 },
-  ]},
-  { id: 'q2', who: '트레이너#1188', loc: '서초구', dong: '서초동', t: '자판기 #14 재고 다 떨어졌나요?', body: '오후에 가봤는데 LED가 꺼져있던데 재입고 언제쯤일까요?', tag: '질문', mins: 22, hearts: 3, comments: [
-    { who: '트레이너#0421', t: '보통 화/금에 채운대요', mins: 18 },
-  ]},
-  { id: 'q3', who: '트레이너#0007', loc: '강남구', dong: '논현동', t: '오늘 카드덕후 본점 오픈런 성공!', body: '7시 30분에 도착했는데 5등이었어요. 신상 2박스 + 스타터 1개 겟!', tag: '소식', mins: 51, hearts: 28, comments: [] },
-]
+// 베타: 실제 글은 Supabase posts 테이블에서 가져옴. 비우기.
+export const COMMUNITY: Post[] = []
 
 // 전국 행정구역 — 17개 광역시도 + 기초자치단체.
 // 행정안전부 기준 2024년 행정구역. 군위군(2023.7 경북→대구 편입) 반영.

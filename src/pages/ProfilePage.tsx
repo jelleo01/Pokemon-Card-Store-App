@@ -7,7 +7,6 @@ import EditableRow from '@/components/ui/EditableRow'
 import BackButton from '@/components/ui/BackButton'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { COMMUNITY } from '@/lib/data'
 import { gbStyles } from '@/lib/gbStyles'
 
 interface ProfileShape {
@@ -301,65 +300,6 @@ export default function ProfilePage() {
             editing={editing}
             onChange={(v) => set('notify', v)}
           />
-        </PixelBorder>
-
-        {/* My posts */}
-        <PixelBorder color="#111" bg="var(--paper)" padding={0}>
-          <div
-            style={{
-              background: '#111',
-              color: 'var(--paper)',
-              padding: '4px 8px',
-              fontSize: 10,
-              letterSpacing: 2,
-            }}
-          >
-            MY POSTS
-          </div>
-          {COMMUNITY.slice(0, 2).map((p) => (
-            <div
-              key={p.id}
-              style={{
-                padding: '8px 10px',
-                borderTop: '1px dashed rgba(0,0,0,0.2)',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  marginBottom: 2,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 9,
-                    padding: '1px 5px',
-                    border: '2px solid #111',
-                    background: p.tag === '질문' ? 'var(--paper)' : 'var(--red)',
-                    color: p.tag === '질문' ? '#111' : '#FAFAF7',
-                    letterSpacing: 1,
-                    fontWeight: 700,
-                  }}
-                >
-                  {p.tag === '질문' ? '? 질문' : '★ 소식'}
-                </span>
-                <span style={{ fontSize: 9, color: 'var(--ink-2)' }}>{p.loc}</span>
-                <div style={{ flex: 1 }} />
-                <span
-                  style={{
-                    fontSize: 9,
-                    color: 'var(--ink-2)',
-                    fontFamily: gbStyles.fontEn,
-                  }}
-                >
-                  {p.mins}m
-                </span>
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.4 }}>{p.t}</div>
-            </div>
-          ))}
         </PixelBorder>
 
         {/* Settings list */}

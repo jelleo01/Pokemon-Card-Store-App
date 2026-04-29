@@ -15,6 +15,8 @@ import KakaoMap from '@/components/ui/KakaoMap'
 import { SHOPS, SHOP_TYPES } from '@/lib/data'
 import { gbStyles } from '@/lib/gbStyles'
 import type { LatLng } from '@/lib/kakao'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
 
 const NEW_PIN_DEFAULT: LatLng = { lat: 37.5009, lng: 127.0367 }
 
@@ -23,16 +25,103 @@ type Category = '소식' | '질문'
 
 export default function PostPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [placeMode, setPlace] = useState<PlaceMode>('existing')
-  const [shopId, setShopId] = useState('PC-001')
+  const [shopId, setShopId] = useState<string>(SHOPS[0]?.id ?? '')
   const [category, setCat] = useState<Category>('소식')
   const [stockTag, setStock] = useState('')
   const [body, setBody] = useState('')
   const [pickerOpen, setPicker] = useState(false)
   const [pickerQ, setPickerQ] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
 
-  const open = SHOPS.find((s) => s.id === shopId)!
+  const open = SHOPS.find((s) => s.id === shopId) ?? SHOPS[0]
   const stockTags = ['신상 박스 입고', '잔여 적음', '품절', '재입고 예정', '싱글 카드']
+
+  // 매장 id 가 PC-XXXX 형태(client seed) → DB shop_id 로 매핑 필요.
+  // 현재 SHOPS 는 client-only seed 라 Supabase shops 테이블에 없음.
+  // 베타: shops 테이블에 upsert 해서 uuid 받아온 뒤 그걸로 post.shop_id 채움.
+  async function ensureShopRow(): Promise<string | null> {
+    if (!open) return null
+    // 동일한 (lat,lng) + name 조합으로 이미 있는지 조회
+    const { data: existing } = await supabase
+      .from('shops')
+      .select('id')
+      .eq('name', open.name)
+      .eq('lat', open.lat)
+      .eq('lng', open.lng)
+      .maybeSingle()
+    if (existing) return existing.id
+
+    const typeMap: Record<string, string> = {
+      공식: 'cardshop',
+      카드샵: 'cardshop',
+      자판기: 'vending',
+      편의점: 'cvs',
+      팝업: 'popup',
+    }
+    const { data: inserted, error } = await supabase
+      .from('shops')
+      .insert({
+        name: open.name,
+        type: typeMap[open.type] ?? 'cardshop',
+        addr: open.addr,
+        lat: open.lat,
+        lng: open.lng,
+        verified: open.type === '공식',
+        created_by: user?.id ?? null,
+      })
+      .select('id')
+      .single()
+    if (error) {
+      console.error('[shop upsert]', error)
+      return null
+    }
+    return inserted.id
+  }
+
+  async function handleSubmit() {
+    if (!user) {
+      setErr('로그인이 필요해요.')
+      return
+    }
+    if (placeMode === 'new') {
+      setErr('새 장소 등록은 베타 이후에 열릴 예정이에요.')
+      return
+    }
+    if (body.trim().length < 5) {
+      setErr('본문을 5자 이상 써주세요.')
+      return
+    }
+    if (!open) {
+      setErr('장소를 선택해주세요.')
+      return
+    }
+    setErr(null)
+    setSubmitting(true)
+    try {
+      const shopUuid = await ensureShopRow()
+      if (!shopUuid) {
+        setErr('매장 정보를 저장하지 못했어요.')
+        return
+      }
+      const { error } = await supabase.from('posts').insert({
+        user_id: user.id,
+        shop_id: shopUuid,
+        category: category === '소식' ? 'news' : 'ask',
+        body: body.trim(),
+        tags: category === '소식' && stockTag ? [stockTag] : [],
+      })
+      if (error) {
+        setErr(error.message)
+        return
+      }
+      navigate('/community')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div
@@ -67,8 +156,15 @@ export default function PostPage() {
             POST
           </div>
           <div style={{ flex: 1 }} />
-          <PixelButton sm color="#111" bg="var(--red)" fg="#FAFAF7">
-            등록 ▶
+          <PixelButton
+            sm
+            color="#111"
+            bg="var(--red)"
+            fg="#FAFAF7"
+            onClick={handleSubmit}
+            disabled={submitting}
+          >
+            {submitting ? '등록 중...' : '등록 ▶'}
           </PixelButton>
         </div>
         <div style={{ fontSize: 10, marginTop: 6, opacity: 0.6, letterSpacing: 1 }}>
@@ -439,6 +535,22 @@ export default function PostPage() {
             </div>
           </PixelBorder>
         </div>
+
+        {err && (
+          <div
+            style={{
+              padding: '8px 10px',
+              border: '2px solid var(--red)',
+              background: '#FCE7E7',
+              color: 'var(--red)',
+              fontSize: 11,
+              fontWeight: 700,
+              textAlign: 'center',
+            }}
+          >
+            ✕ {err}
+          </div>
+        )}
 
         <div style={{ height: 8 }} />
       </div>
