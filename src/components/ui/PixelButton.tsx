@@ -1,35 +1,59 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { CSSProperties, MouseEventHandler, ReactNode } from 'react'
+import { gbStyles } from '@/lib/gbStyles'
 
-interface PixelButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost'
-  size?: 'sm' | 'md' | 'lg'
+interface PixelButtonProps {
+  children?: ReactNode
+  color?: string
+  bg?: string
+  fg?: string
+  full?: boolean
+  onClick?: MouseEventHandler<HTMLButtonElement>
+  style?: CSSProperties
+  sm?: boolean
+  type?: 'button' | 'submit' | 'reset'
 }
 
 export default function PixelButton({
-  variant = 'primary',
-  size = 'md',
-  className = '',
   children,
-  ...props
+  color = '#111',
+  bg = '#FAFAF7',
+  fg,
+  full,
+  onClick,
+  style,
+  sm,
+  type = 'button',
 }: PixelButtonProps) {
-  const base = 'font-galmuri font-bold border-2 border-ink active:translate-y-0.5 transition-transform duration-75 disabled:opacity-50 disabled:cursor-not-allowed'
-
-  const variants = {
-    primary: 'bg-red text-white hover:bg-red-2',
-    secondary: 'bg-paper-2 text-ink hover:bg-paper',
-    ghost: 'bg-transparent text-ink border-transparent hover:bg-paper-2',
-  }
-
-  const sizes = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2.5 text-base',
-    lg: 'px-6 py-3 text-lg w-full',
-  }
-
   return (
     <button
-      className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
-      {...props}
+      type={type}
+      onClick={onClick}
+      style={{
+        fontFamily: gbStyles.font,
+        fontSize: sm ? 11 : 13,
+        color: fg || color,
+        background: bg,
+        border: `2px solid ${color}`,
+        padding: sm ? '5px 10px' : '8px 14px',
+        width: full ? '100%' : undefined,
+        cursor: 'pointer',
+        boxShadow: `3px 3px 0 0 ${color}`,
+        transition: 'transform 60ms, box-shadow 60ms',
+        imageRendering: 'pixelated',
+        ...style,
+      }}
+      onMouseDown={(e) => {
+        e.currentTarget.style.transform = 'translate(2px,2px)'
+        e.currentTarget.style.boxShadow = `1px 1px 0 0 ${color}`
+      }}
+      onMouseUp={(e) => {
+        e.currentTarget.style.transform = 'translate(0,0)'
+        e.currentTarget.style.boxShadow = `3px 3px 0 0 ${color}`
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translate(0,0)'
+        e.currentTarget.style.boxShadow = `3px 3px 0 0 ${color}`
+      }}
     >
       {children}
     </button>

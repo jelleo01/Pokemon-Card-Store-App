@@ -8,7 +8,12 @@ export default function RequireAuth() {
   if (loading) return null
 
   if (!user) {
-    return <Navigate to={`/auth-wall?redirect=${encodeURIComponent(location.pathname)}`} replace />
+    return (
+      <Navigate
+        to={`/auth-wall?redirect=${encodeURIComponent(location.pathname + location.search)}`}
+        replace
+      />
+    )
   }
 
   return <Outlet />

@@ -1,39 +1,57 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import type { Session, User } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
+
+export interface TrainerUser {
+  id: string
+  phone: string
+  region: string
+}
 
 interface AuthContextValue {
-  session: Session | null
-  user: User | null
+  user: TrainerUser | null
   loading: boolean
-  signOut: () => Promise<void>
+  signIn: (user: TrainerUser) => void
+  signOut: () => void
+  updateUser: (patch: Partial<TrainerUser>) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
+const STORAGE_KEY = 'trainer_user'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
+  const [user, setUser] = useState<TrainerUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setLoading(false)
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-    })
-
-    return () => subscription.unsubscribe()
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (raw) setUser(JSON.parse(raw) as TrainerUser)
+    } catch {
+      // ignore
+    }
+    setLoading(false)
   }, [])
 
-  async function signOut() {
-    await supabase.auth.signOut()
+  function signIn(next: TrainerUser) {
+    setUser(next)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  }
+
+  function signOut() {
+    setUser(null)
+    localStorage.removeItem(STORAGE_KEY)
+  }
+
+  function updateUser(patch: Partial<TrainerUser>) {
+    setUser((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, ...patch }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      return next
+    })
   }
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut, updateUser }}>
       {children}
     </AuthContext.Provider>
   )

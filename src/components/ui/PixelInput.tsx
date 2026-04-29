@@ -1,19 +1,24 @@
 import type { InputHTMLAttributes } from 'react'
+import { gbStyles } from '@/lib/gbStyles'
 
-interface PixelInputProps extends InputHTMLAttributes<HTMLInputElement> {
-  label?: string
-  error?: string
-}
+type PixelInputProps = InputHTMLAttributes<HTMLInputElement>
 
-export default function PixelInput({ label, error, className = '', ...props }: PixelInputProps) {
+export default function PixelInput(props: PixelInputProps) {
+  const { style, ...rest } = props
   return (
-    <div className="flex flex-col gap-1 font-galmuri">
-      {label && <label className="text-sm font-bold text-ink">{label}</label>}
-      <input
-        className={`border-2 border-ink bg-paper px-3 py-2 text-ink text-sm outline-none focus:border-red transition-colors ${className}`}
-        {...props}
-      />
-      {error && <span className="text-xs text-red">{error}</span>}
-    </div>
+    <input
+      {...rest}
+      style={{
+        width: '100%',
+        padding: '6px 8px',
+        border: '2px solid #111',
+        background: 'var(--paper)',
+        boxSizing: 'border-box',
+        fontFamily: gbStyles.font,
+        fontSize: 11,
+        outline: 'none',
+        ...style,
+      }}
+    />
   )
 }
