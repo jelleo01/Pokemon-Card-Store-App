@@ -77,7 +77,7 @@
 - 길찾기: `https://map.kakao.com/?sName=내위치&eName=매장명` (외부 URL)
 
 ### 카카오맵 통합
-→ `KAKAO_MAP_GUIDE.md` 참고
+→ `docs/KAKAO_MAP_GUIDE.md` 참고
 
 ---
 

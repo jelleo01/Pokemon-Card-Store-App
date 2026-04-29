@@ -22,7 +22,7 @@
 - [ ] Lovable 또는 로컬 Vite 프로젝트 생성
 - [ ] GitHub repo 생성 + 양방향 sync
 - [ ] Supabase 프로젝트 생성
-- [ ] `SUPABASE_SCHEMA.sql` 실행
+- [ ] `supabase/schema.sql` 실행
 - [ ] Tailwind + 디자인 토큰 셋업
 - [ ] Galmuri11 폰트 추가
 - [ ] 기본 라우팅 (`react-router-dom` 또는 Lovable 라우팅)
@@ -57,7 +57,7 @@
 **산출물**: 글쓰기 → 커뮤니티 노출 → 상세 → 댓글까지 풀 플로우
 
 ### Week 5 — 매장 데이터 + 폴리시
-- [ ] `CRAWLING_GUIDE.md` 따라 시드 100~200개 수집
+- [ ] `docs/CRAWLING_GUIDE.md` 따라 시드 100~200개 수집
 - [ ] Supabase에 일괄 import
 - [ ] 카카오맵에 표시 + 거리순 정렬 검증
 - [ ] Map 페이지 FILTER, INDEX 등 디테일 마무리

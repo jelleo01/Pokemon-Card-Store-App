@@ -10,7 +10,7 @@
 handoff/
 ├── HANDOFF.md              ← (지금 이 파일) 시작 가이드
 ├── MVP_SPEC.md             ← 화면별 기능/인터랙션/상태 명세 (가장 중요)
-├── SUPABASE_SCHEMA.sql     ← DB 스키마 + RLS 정책 — Supabase에 그대로 붙여넣기
+├── supabase/schema.sql     ← DB 스키마 + RLS 정책 — Supabase에 그대로 붙여넣기
 ├── KAKAO_MAP_GUIDE.md      ← 카카오맵 SDK / Geocoding / 거리 계산
 ├── CRAWLING_GUIDE.md       ← 매장 시드 데이터 100~200개 수집 전략
 ├── REGIONS_DATA.md         ← 전국 시/군/구 행정구역 데이터 출처 + JSON 형식
@@ -91,7 +91,7 @@ cp .env.example .env.local
 
 ### 3. Supabase 셋업
 1. [supabase.com](https://supabase.com) 에서 프로젝트 생성
-2. SQL Editor → `SUPABASE_SCHEMA.sql` 내용 전체 붙여넣기 → Run
+2. SQL Editor → `supabase/schema.sql` 내용 전체 붙여넣기 → Run
 3. Authentication → Providers → **Phone** 활성화
    - SMS Provider: **Twilio** (또는 **MessageBird**, 한국이면 **NHN Toast SMS** 게이트웨이도 가능)
    - 비용: Twilio 한국 SMS 약 $0.04/건
@@ -140,7 +140,7 @@ npm run dev
 | GitHub 연동 | Lovable의 GitHub sync |
 | Supabase 작업 | Supabase Dashboard SQL Editor |
 | 매장 크롤링 | Python + Playwright (`CRAWLING_GUIDE.md`) |
-| 디자인 참조 | `Pokemon Cards.html` (이 프로젝트 루트의 Design Canvas) |
+| 디자인 참조 | `design-source/Pokemon Cards.html` (Design Canvas) |
 
 ---
 
@@ -148,7 +148,7 @@ npm run dev
 
 1. **`MVP_SPEC.md`** ← 화면별 동작이 전부 적혀 있음. 여기서부터 시작.
 2. **`ROADMAP.md`** ← 어떤 순서로 작업할지
-3. **`SUPABASE_SCHEMA.sql`** ← DB 만들기
+3. **`supabase/schema.sql`** ← DB 만들기
 4. **`KAKAO_MAP_GUIDE.md`** ← 지도 붙이기
 
 ---
@@ -168,6 +168,6 @@ npm run dev
 
 이 폴더의 각 .md 파일을 우선 확인:
 - 빌드 안 됨 → `package.json`, `tsconfig.json` 확인
-- DB 에러 → `SUPABASE_SCHEMA.sql` 다시 실행
+- DB 에러 → `supabase/schema.sql` 다시 실행
 - 지도 안 뜸 → `KAKAO_MAP_GUIDE.md`의 troubleshooting 섹션
 - 매장 데이터 부족 → `CRAWLING_GUIDE.md`

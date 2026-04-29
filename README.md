@@ -5,26 +5,37 @@
 
 ---
 
-## 📦 이 폴더에 있는 것들
+## 📦 폴더 구조
 
 ```
-handoff/
+.
 ├── README.md              ← 지금 보고 있는 파일
-├── docs/
-│   ├── 01_MVP_SPEC.md          화면별 기능 명세 (가장 중요)
-│   ├── 02_SUPABASE_SCHEMA.sql  DB 스키마 + RLS 정책
-│   ├── 03_KAKAO_MAP_GUIDE.md   카카오맵 통합 가이드
-│   ├── 04_CRAWLING_GUIDE.md    매장 데이터 수집 전략
-│   ├── 05_REGIONS_DATA.md      시/군/구 데이터 출처 + 형식
-│   ├── 06_LEGAL_CHECKLIST.md   약관/개인정보처리방침 체크리스트
-│   ├── 07_ADMIN_PAGE.md        관리자 페이지 (신고 처리)
-│   └── 08_ROADMAP.md           Week-by-week MVP 로드맵
+├── docs/                  설계 / 가이드 문서
+│   ├── HANDOFF.md             핸드오프 시작 가이드
+│   ├── MVP_SPEC.md            화면별 기능 명세
+│   ├── ROADMAP.md             Week-by-week MVP 로드맵
+│   ├── KAKAO_MAP_GUIDE.md     카카오맵 SDK 통합 가이드
+│   ├── CRAWLING_GUIDE.md      매장 데이터 수집 전략
+│   ├── REGIONS_DATA.md        시/군/구 데이터 출처 + 형식
+│   └── LEGAL_CHECKLIST.md     약관/개인정보처리방침 체크리스트
+├── supabase/
+│   └── schema.sql             DB 스키마 + RLS 정책 (Supabase SQL Editor 에 붙여넣기)
+├── design-source/         디자인 캔버스 원본 (앱에선 안 씀, 참고용)
+│   ├── Pokemon Cards.html
+│   ├── design-canvas.jsx
+│   ├── ios-frame.jsx
+│   ├── data.jsx
+│   ├── tokens.css
+│   └── version-gameboy*.jsx
+├── scripts/
+│   └── crawl-shops.mjs        매장 자동 크롤링 (Node 20.6+)
 └── src/
-    ├── design-tokens.css       색상/폰트 토큰 (그대로 복사)
-    ├── components/             재사용 컴포넌트 (PixelButton, Sprite, ...)
-    ├── pages/                  화면별 페이지 (Home, Map, Post, ...)
-    ├── data/                   샘플 데이터 (개발용)
-    └── lib/                    Supabase / Kakao / Auth 헬퍼
+    ├── components/ui/         픽셀 UI 컴포넌트 (PixelButton, Sprite, KakaoMap, ...)
+    ├── pages/                 화면 9개 (Home, Map, Post, ...)
+    ├── lib/                   data, kakao, supabase, gbStyles, mapMarkers, seedShops
+    ├── contexts/              AuthContext
+    ├── styles/                tokens.css + index.css
+    └── types/                 kakao.d.ts
 ```
 
 ---
@@ -34,7 +45,7 @@ handoff/
 1. **새 Lovable 프로젝트 생성** — Vite + React + Supabase 템플릿 선택
 2. **GitHub repo 연결** — Lovable 우상단 GitHub 아이콘 → 저장소 연결
 3. 이 `handoff/src/` 안의 파일들을 복사해 Lovable 프로젝트에 넣기
-4. `docs/02_SUPABASE_SCHEMA.sql` 을 Supabase SQL Editor에 붙여넣어 실행
+4. `supabase/schema.sql` 을 Supabase SQL Editor에 붙여넣어 실행
 5. 환경변수 설정 (.env):
    ```
    VITE_KAKAO_MAP_KEY=xxxxx
@@ -82,20 +93,20 @@ handoff/
 
 > 순서대로 읽으면 전체 그림이 잡혀요.
 
-1. **`docs/08_ROADMAP.md`** — 6주 MVP 일정 한눈에 보기
-2. **`docs/01_MVP_SPEC.md`** — 화면별로 무엇을 구현할지
-3. **`docs/02_SUPABASE_SCHEMA.sql`** — DB 만들기
-4. **`docs/03_KAKAO_MAP_GUIDE.md`** — 지도 띄우기
-5. **`docs/04_CRAWLING_GUIDE.md`** — 매장 데이터 모으기
-6. 나머지 (Regions, Legal, Admin) — 필요할 때
+1. **`docs/ROADMAP.md`** — 6주 MVP 일정 한눈에 보기
+2. **`docs/MVP_SPEC.md`** — 화면별로 무엇을 구현할지
+3. **`supabase/schema.sql`** — DB 만들기
+4. **`docs/KAKAO_MAP_GUIDE.md`** — 지도 띄우기
+5. **`docs/CRAWLING_GUIDE.md`** — 매장 데이터 모으기
+6. 나머지 (Regions, Legal) — 필요할 때
 
 ---
 
 ## 🎨 디자인 원본
 
-- 메인 디자인 파일: `../Pokemon Cards.html` (이 핸드오프의 부모 폴더)
-- 디자인 토큰: `../tokens.css`
-- 폰트: Galmuri11 (Google Fonts), JetBrains Mono (영문)
+- 메인 디자인 캔버스: `design-source/Pokemon Cards.html` (브라우저로 열면 모든 화면 확인 가능)
+- 디자인 토큰: `design-source/tokens.css`
+- 폰트: Galmuri11 (한글 픽셀, quiple/galmuri CDN), Geist (영문)
 
 ---
 
