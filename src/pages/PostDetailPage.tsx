@@ -50,47 +50,72 @@ export default function PostDetailPage() {
     if (!id) return
     let alive = true
     setLoading(true)
-    supabase
-      .from('posts')
-      .select(
-        'id, body, category, hearts_count, created_at, profiles(trainer_id), shops(name, city, district, dong)',
-      )
-      .eq('id', id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!alive) return
+    setNotFound(false)
+
+    ;(async () => {
+      // 1) post 본문
+      const { data: postRow, error: postErr } = await supabase
+        .from('posts')
+        .select('id, body, category, hearts_count, created_at, user_id, shop_id')
+        .eq('id', id)
+        .maybeSingle()
+      if (!alive) return
+      if (postErr) {
+        console.error('[post detail]', postErr)
+        setNotFound(true)
         setLoading(false)
-        if (error || !data) {
-          setNotFound(true)
-          return
-        }
-        const row = data as unknown as {
-          id: string
-          body: string
-          category: 'news' | 'ask'
-          hearts_count: number
-          created_at: string
-          profiles: { trainer_id: string } | null
-          shops: {
-            name: string
-            city: string | null
-            district: string | null
-            dong: string | null
-          } | null
-        }
-        setPost({
-          id: row.id,
-          body: row.body,
-          category: row.category,
-          hearts_count: row.hearts_count ?? 0,
-          created_at: row.created_at,
-          who: row.profiles?.trainer_id ?? '익명',
-          loc: row.shops?.district ?? row.shops?.city ?? '',
-          dong: row.shops?.dong ?? '',
-          shop_name: row.shops?.name ?? '',
-        })
-        setHearts(row.hearts_count ?? 0)
+        return
+      }
+      if (!postRow) {
+        setNotFound(true)
+        setLoading(false)
+        return
+      }
+
+      // 2) 작성자 프로필 + 매장 (있으면) 병렬
+      const [profileRes, shopRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('trainer_id')
+          .eq('id', postRow.user_id)
+          .maybeSingle(),
+        postRow.shop_id
+          ? supabase
+              .from('shops')
+              .select('name, city, district, dong')
+              .eq('id', postRow.shop_id)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ])
+      if (!alive) return
+      if (profileRes.error) console.error('[post profile]', profileRes.error)
+      if (shopRes.error) console.error('[post shop]', shopRes.error)
+
+      const profile = profileRes.data as { trainer_id: string } | null
+      const shop = shopRes.data as
+        | { name: string; city: string | null; district: string | null; dong: string | null }
+        | null
+
+      setPost({
+        id: postRow.id,
+        body: postRow.body,
+        category: postRow.category,
+        hearts_count: postRow.hearts_count ?? 0,
+        created_at: postRow.created_at,
+        who: profile?.trainer_id ?? '익명',
+        loc: shop?.district ?? shop?.city ?? '',
+        dong: shop?.dong ?? '',
+        shop_name: shop?.name ?? '',
       })
+      setHearts(postRow.hearts_count ?? 0)
+      setLoading(false)
+    })().catch((e) => {
+      if (!alive) return
+      console.error('[post detail unexpected]', e)
+      setNotFound(true)
+      setLoading(false)
+    })
+
     return () => {
       alive = false
     }
@@ -99,19 +124,38 @@ export default function PostDetailPage() {
   useEffect(() => {
     if (!id) return
     let alive = true
-    supabase
-      .from('comments')
-      .select('id, body, created_at, user_id, profiles(trainer_id)')
-      .eq('post_id', id)
-      .order('created_at', { ascending: true })
-      .then(({ data, error }) => {
-        if (!alive) return
-        if (error) {
-          console.error('[comments fetch]', error)
-          return
+    ;(async () => {
+      const { data: rows, error } = await supabase
+        .from('comments')
+        .select('id, body, created_at, user_id')
+        .eq('post_id', id)
+        .order('created_at', { ascending: true })
+      if (!alive) return
+      if (error) {
+        console.error('[comments fetch]', error)
+        return
+      }
+      const list = (rows ?? []) as Omit<CommentRow, 'profiles'>[]
+      const userIds = Array.from(new Set(list.map((c) => c.user_id)))
+      const profileMap = new Map<string, { trainer_id: string }>()
+      if (userIds.length > 0) {
+        const { data: profiles, error: pErr } = await supabase
+          .from('profiles')
+          .select('id, trainer_id')
+          .in('id', userIds)
+        if (pErr) console.error('[comments profiles]', pErr)
+        for (const p of (profiles ?? []) as { id: string; trainer_id: string }[]) {
+          profileMap.set(p.id, { trainer_id: p.trainer_id })
         }
-        setComments((data as unknown as CommentRow[]) ?? [])
-      })
+      }
+      if (!alive) return
+      setComments(
+        list.map((c) => ({
+          ...c,
+          profiles: profileMap.get(c.user_id) ?? null,
+        })),
+      )
+    })()
     return () => {
       alive = false
     }
@@ -171,14 +215,22 @@ export default function PostDetailPage() {
     const { data, error } = await supabase
       .from('comments')
       .insert({ post_id: id, user_id: user.id, body: text })
-      .select('id, body, created_at, user_id, profiles(trainer_id)')
+      .select('id, body, created_at, user_id')
       .single()
     setSubmitting(false)
     if (error) {
       alert(error.message)
       return
     }
-    setComments((cs) => [...cs, data as unknown as CommentRow])
+    // 작성자 닉네임은 useAuth 의 trainerId 사용 (별도 query 불필요)
+    const inserted = data as Omit<CommentRow, 'profiles'>
+    setComments((cs) => [
+      ...cs,
+      {
+        ...inserted,
+        profiles: user.trainerId ? { trainer_id: user.trainerId } : null,
+      },
+    ])
     setDraft('')
   }
 
@@ -250,10 +302,10 @@ export default function PostDetailPage() {
           <BackButton onClick={() => navigate('/community')} />
           <div
             style={{
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: 700,
-              letterSpacing: 1,
-              fontFamily: gbStyles.fontEn,
+              letterSpacing: 0.3,
+              fontFamily: post.shop_name ? gbStyles.fontReadable : gbStyles.fontEn,
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -276,36 +328,59 @@ export default function PostDetailPage() {
           >
             <span
               style={{
-                fontSize: 9,
-                padding: '1px 5px',
+                fontSize: 10,
+                padding: '1px 6px',
                 border: '2px solid #111',
                 background: isAsk ? 'var(--paper)' : 'var(--red)',
                 color: isAsk ? '#111' : '#FAFAF7',
-                letterSpacing: 1,
+                letterSpacing: 0.5,
                 fontWeight: 700,
+                fontFamily: gbStyles.fontReadable,
               }}
             >
               {isAsk ? '? 질문' : '★ 소식'}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--ink-2)' }}>
+            <span
+              style={{
+                fontSize: 11,
+                color: 'var(--ink-2)',
+                fontFamily: gbStyles.fontReadable,
+              }}
+            >
               {post.loc}
               {post.dong ? ' · ' + post.dong : ''}
             </span>
             <div style={{ flex: 1 }} />
             <span
               style={{
-                fontSize: 9,
+                fontSize: 10,
                 color: 'var(--ink-2)',
-                fontFamily: gbStyles.fontEn,
+                fontFamily: gbStyles.fontReadable,
               }}
             >
               {minsAgo(post.created_at)}m
             </span>
           </div>
-          <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.4, marginBottom: 6 }}>
+          <div
+            style={{
+              fontSize: 17,
+              fontWeight: 700,
+              lineHeight: 1.45,
+              marginBottom: 8,
+              fontFamily: gbStyles.fontReadable,
+            }}
+          >
             {title}
           </div>
-          <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--ink-2)', whiteSpace: 'pre-wrap' }}>
+          <div
+            style={{
+              fontSize: 14,
+              lineHeight: 1.7,
+              color: 'var(--ink)',
+              whiteSpace: 'pre-wrap',
+              fontFamily: gbStyles.fontReadable,
+            }}
+          >
             {post.body}
           </div>
           <div
@@ -330,7 +405,9 @@ export default function PostDetailPage() {
             >
               <Sprite kind="ball" size={14} />
             </div>
-            <span style={{ fontWeight: 700 }}>{post.who}</span>
+            <span style={{ fontWeight: 700, fontFamily: gbStyles.fontReadable, fontSize: 13 }}>
+              {post.who}
+            </span>
             <div style={{ flex: 1 }} />
             <button
               onClick={toggleHeart}
@@ -389,11 +466,16 @@ export default function PostDetailPage() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
-                      marginBottom: 2,
-                      fontSize: 10,
+                      marginBottom: 4,
+                      fontSize: 11,
                     }}
                   >
-                    <span style={{ fontWeight: 700 }}>
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        fontFamily: gbStyles.fontReadable,
+                      }}
+                    >
                       {c.profiles?.trainer_id ?? '익명'}
                     </span>
                     <div style={{ flex: 1 }} />
@@ -401,12 +483,21 @@ export default function PostDetailPage() {
                       style={{
                         color: 'var(--ink-2)',
                         fontFamily: gbStyles.fontEn,
+                        fontSize: 10,
                       }}
                     >
                       {minsAgo(c.created_at)}m
                     </span>
                   </div>
-                  <div style={{ fontSize: 12, lineHeight: 1.5 }}>{c.body}</div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      lineHeight: 1.6,
+                      fontFamily: gbStyles.fontReadable,
+                    }}
+                  >
+                    {c.body}
+                  </div>
                 </div>
               </PixelBorder>
             ))}
@@ -453,8 +544,8 @@ export default function PostDetailPage() {
             padding: '6px 10px',
             border: '2px solid #111',
             boxSizing: 'border-box',
-            fontFamily: gbStyles.font,
-            fontSize: 12,
+            fontFamily: gbStyles.fontReadable,
+            fontSize: 13,
             background: 'var(--paper)',
             outline: 'none',
           }}

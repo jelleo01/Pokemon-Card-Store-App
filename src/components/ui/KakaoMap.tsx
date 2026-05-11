@@ -41,6 +41,8 @@ interface KakaoMapProps {
   onMeClick?: () => void
   /** Fired after the user finishes panning/zooming. Use to read map center. */
   onIdle?: (center: LatLng) => void
+  /** Fired when the user taps an empty area of the map (not on a pin). */
+  onMapClick?: (latlng: LatLng) => void
   style?: CSSProperties
 }
 
@@ -57,6 +59,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
     onPinClick,
     onMeClick,
     onIdle,
+    onMapClick,
     style,
   },
   ref,
@@ -133,6 +136,21 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
     }
   }, [onIdle])
 
+  // 빈 공간 탭 → lat/lng 전달 (새 장소 핀 배치용).
+  // CustomOverlay 가 clickable=true 인 경우 그 핀을 탭하면 'click' 이 안 뜸.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !onMapClick) return
+    const handler = (...args: unknown[]) => {
+      const e = args[0] as kakao.maps.MouseEvent
+      onMapClick({ lat: e.latLng.getLat(), lng: e.latLng.getLng() })
+    }
+    kakao.maps.event.addListener(map, 'click', handler)
+    return () => {
+      kakao.maps.event.removeListener(map, 'click', handler)
+    }
+  }, [onMapClick])
+
   // Shop pins
   useEffect(() => {
     const map = mapRef.current
@@ -181,6 +199,9 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
     const overlay = new kakao.maps.CustomOverlay({
       position: new kakao.maps.LatLng(newPin.lat, newPin.lng),
       content: newPinHtml(),
+      // 컨텐츠 wrapper(0×0)의 origin이 정확히 lat/lng에 오도록 anchor를 좌상단으로.
+      xAnchor: 0,
+      yAnchor: 0,
       zIndex: 5,
     })
     overlay.setMap(map)

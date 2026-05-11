@@ -24,13 +24,13 @@ export default function CategoryCard({ active, onClick, icon, title, en, sub }: 
         color: '#111',
         boxShadow: active ? '1px 1px 0 0 #111' : '3px 3px 0 0 #111',
         transform: active ? 'translate(2px, 2px)' : 'translate(0, 0)',
-        fontFamily: gbStyles.font,
+        fontFamily: gbStyles.fontReadable,
         transition: 'transform 60ms, box-shadow 60ms',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
         <Sprite kind={icon} size={18} />
-        <span style={{ fontSize: 13, fontWeight: 700 }}>{title}</span>
+        <span style={{ fontSize: 14, fontWeight: 700 }}>{title}</span>
         <span
           style={{
             fontSize: 9,
@@ -42,7 +42,7 @@ export default function CategoryCard({ active, onClick, icon, title, en, sub }: 
           {en}
         </span>
       </div>
-      <div style={{ fontSize: 10, opacity: 0.8 }}>{sub}</div>
+      <div style={{ fontSize: 11, opacity: 0.8 }}>{sub}</div>
     </button>
   )
 }

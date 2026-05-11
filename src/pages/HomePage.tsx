@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import GBTabBar from '@/components/ui/GBTabBar'
 import PixelBorder from '@/components/ui/PixelBorder'
 import PixelButton from '@/components/ui/PixelButton'
 import Sprite from '@/components/ui/Sprite'
+import { supabase } from '@/lib/supabase'
 import { gbStyles } from '@/lib/gbStyles'
 
 export default function HomePage() {
@@ -86,20 +88,28 @@ function Landing() {
   )
 }
 
-const LOC_KEY = 'user_location'
-
 function SignedInHome() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [latestNotice, setLatestNotice] = useState<{ title: string } | null>(null)
 
-  const stored = localStorage.getItem(LOC_KEY)
-  const loc =
-    stored ||
-    (user?.city
-      ? user.district
-        ? `${user.city} ${user.district}`
-        : user.city
-      : '지역 미설정')
+  useEffect(() => {
+    let alive = true
+    supabase
+      .from('notices')
+      .select('title')
+      .order('pinned', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!alive) return
+        if (data) setLatestNotice(data as { title: string })
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   return (
     <div
@@ -112,56 +122,48 @@ function SignedInHome() {
         color: 'var(--ink)',
       }}
     >
+      {/* Top banner: HOME 중앙 + 우측 프로필 */}
       <div
         style={{
-          padding: '14px 16px 8px',
+          padding: '14px 16px 10px',
           borderBottom: '2px solid #111',
           background: 'var(--paper-2)',
           flexShrink: 0,
+          position: 'relative',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Sprite kind="ball" size={22} />
-          <div
-            style={{
-              fontSize: 18,
-              fontWeight: 700,
-              letterSpacing: 1,
-              fontFamily: gbStyles.fontEn,
-            }}
-          >
-            POKEMON CARDS
-          </div>
-          <div style={{ flex: 1 }} />
-          <button
-            onClick={() => navigate('/profile')}
-            title="프로필"
-            style={{
-              width: 30,
-              height: 30,
-              padding: 0,
-              cursor: 'pointer',
-              background: 'var(--paper)',
-              border: '2px solid #111',
-              boxShadow: '2px 2px 0 0 #111',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Sprite kind="person" size={18} />
-          </button>
-        </div>
         <div
           style={{
-            fontSize: 10,
-            marginTop: 4,
-            opacity: 0.6,
-            letterSpacing: 1,
+            fontSize: 16,
+            fontWeight: 700,
+            letterSpacing: 4,
+            fontFamily: gbStyles.fontEn,
+            textAlign: 'center',
           }}
         >
-          ※ {user?.trainerId} · 카드 판매점 찾기
+          HOME
         </div>
+        <button
+          onClick={() => navigate('/profile')}
+          title="프로필"
+          style={{
+            position: 'absolute',
+            right: 14,
+            top: 10,
+            width: 30,
+            height: 30,
+            padding: 0,
+            cursor: 'pointer',
+            background: 'var(--paper)',
+            border: '2px solid #111',
+            boxShadow: '2px 2px 0 0 #111',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Sprite kind="person" size={18} />
+        </button>
       </div>
 
       <div
@@ -170,12 +172,54 @@ function SignedInHome() {
           padding: 14,
           display: 'flex',
           flexDirection: 'column',
-          gap: 12,
           overflow: 'auto',
-          justifyContent: 'center',
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* POKEMON CARDS 타이틀 */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 0 4px',
+          }}
+        >
+          <Sprite kind="ball" size={36} />
+          <div
+            style={{
+              fontSize: 20,
+              fontWeight: 700,
+              letterSpacing: 3,
+              fontFamily: gbStyles.fontEn,
+              textAlign: 'center',
+              lineHeight: 1.2,
+            }}
+          >
+            POKEMON CARDS
+          </div>
+          <div
+            style={{
+              fontSize: 10,
+              opacity: 0.6,
+              letterSpacing: 1,
+            }}
+          >
+            ※ {user?.trainerId} · 카드 판매점 찾기
+          </div>
+        </div>
+
+        {/* 메인 버튼 3개 — 세로 중앙 */}
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            gap: 10,
+            padding: '20px 0',
+          }}
+        >
           <PixelButton
             full
             color="#111"
@@ -205,28 +249,48 @@ function SignedInHome() {
           </PixelButton>
         </div>
 
-        <PixelBorder color="#111" bg="var(--paper-2)" padding={10}>
-          <div style={{ fontSize: 10, letterSpacing: 2, marginBottom: 6 }}>
-            위치선택 / LOCATION
-          </div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        {/* 공지사항 — 클릭하면 /notices */}
+        <button
+          onClick={() => navigate('/notices')}
+          style={{
+            padding: 0,
+            border: 'none',
+            background: 'transparent',
+            cursor: 'pointer',
+            textAlign: 'left',
+            opacity: latestNotice ? 1 : 0.45,
+          }}
+        >
+          <PixelBorder color="#111" bg="var(--paper-2)" padding={10}>
             <div
               style={{
-                flex: 1,
-                fontSize: 12,
+                fontSize: 10,
+                letterSpacing: 2,
+                fontFamily: gbStyles.fontEn,
                 fontWeight: 700,
+                marginBottom: 4,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <span>★ 공지사항 / NOTICE</span>
+              <span style={{ flex: 1 }} />
+              <span style={{ fontSize: 9, opacity: 0.6 }}>▶</span>
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--ink-2)',
+                lineHeight: 1.5,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
               }}
             >
-              ▶ {loc}
+              {latestNotice?.title ?? '현재 등록된 공지사항이 없어요.'}
             </div>
-            <PixelButton sm color="#111" bg="var(--paper)" onClick={() => navigate('/location')}>
-              CHANGE
-            </PixelButton>
-          </div>
-        </PixelBorder>
+          </PixelBorder>
+        </button>
       </div>
 
       <GBTabBar active="home" />

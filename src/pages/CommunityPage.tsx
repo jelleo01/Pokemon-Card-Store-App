@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import GBTabBar from '@/components/ui/GBTabBar'
 import PixelButton from '@/components/ui/PixelButton'
@@ -15,11 +15,24 @@ interface PostRow {
   id: string
   body: string
   category: 'news' | 'ask'
-  hearts_count: number
-  comments_count: number
+  hearts_count: number | null
+  comments_count: number | null
   created_at: string
-  profiles: { trainer_id: string } | null
-  shops: { name: string; city: string | null; district: string | null; dong: string | null } | null
+  user_id: string
+  shop_id: string | null
+}
+
+interface ProfileRow {
+  id: string
+  trainer_id: string
+}
+
+interface ShopRow {
+  id: string
+  name: string
+  city: string | null
+  district: string | null
+  dong: string | null
 }
 
 function minsAgo(iso: string): number {
@@ -27,14 +40,18 @@ function minsAgo(iso: string): number {
   return Math.max(0, Math.round(diffMs / 60000))
 }
 
-function rowToPost(r: PostRow): Post {
+function buildPost(
+  r: PostRow,
+  profile: ProfileRow | undefined,
+  shop: ShopRow | undefined,
+): Post {
   const firstLine = r.body.split('\n')[0]
   const t = firstLine.length > 40 ? firstLine.slice(0, 40) + '…' : firstLine
   return {
     id: r.id,
-    who: r.profiles?.trainer_id ?? '익명',
-    loc: r.shops?.district ?? r.shops?.city ?? '미지정',
-    dong: r.shops?.dong ?? '',
+    who: profile?.trainer_id ?? '익명',
+    loc: shop?.district ?? shop?.city ?? '미지정',
+    dong: shop?.dong ?? '',
     t,
     body: r.body,
     tag: r.category === 'news' ? '소식' : '질문',
@@ -55,30 +72,75 @@ export default function CommunityPage() {
   const [district, setDistrict] = useState('전체')
   const [allPosts, setAllPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+
+  const fetchPosts = useCallback(async () => {
+    setLoading(true)
+    setErr(null)
+    const { data: postRows, error: postErr } = await supabase
+      .from('posts')
+      .select('id, body, category, hearts_count, comments_count, created_at, user_id, shop_id')
+      .order('created_at', { ascending: false })
+      .limit(100)
+    if (postErr) {
+      console.error('[community posts]', postErr)
+      setErr(`글 목록을 못 가져왔어요: ${postErr.message}`)
+      setLoading(false)
+      return
+    }
+    const rows = (postRows ?? []) as PostRow[]
+    if (rows.length === 0) {
+      setAllPosts([])
+      setLoading(false)
+      return
+    }
+
+    const userIds = Array.from(new Set(rows.map((r) => r.user_id)))
+    const shopIds = Array.from(
+      new Set(rows.map((r) => r.shop_id).filter((id): id is string => !!id)),
+    )
+
+    const [profilesRes, shopsRes] = await Promise.all([
+      userIds.length > 0
+        ? supabase.from('profiles').select('id, trainer_id').in('id', userIds)
+        : Promise.resolve({ data: [], error: null }),
+      shopIds.length > 0
+        ? supabase
+            .from('shops')
+            .select('id, name, city, district, dong')
+            .in('id', shopIds)
+        : Promise.resolve({ data: [], error: null }),
+    ])
+
+    if (profilesRes.error) console.error('[community profiles]', profilesRes.error)
+    if (shopsRes.error) console.error('[community shops]', shopsRes.error)
+
+    const profileMap = new Map<string, ProfileRow>()
+    for (const p of (profilesRes.data ?? []) as ProfileRow[]) profileMap.set(p.id, p)
+    const shopMap = new Map<string, ShopRow>()
+    for (const s of (shopsRes.data ?? []) as ShopRow[]) shopMap.set(s.id, s)
+
+    setAllPosts(
+      rows.map((r) =>
+        buildPost(r, profileMap.get(r.user_id), r.shop_id ? shopMap.get(r.shop_id) : undefined),
+      ),
+    )
+    setLoading(false)
+  }, [])
 
   useEffect(() => {
     let alive = true
-    setLoading(true)
-    supabase
-      .from('posts')
-      .select(
-        'id, body, category, hearts_count, comments_count, created_at, profiles(trainer_id), shops(name, city, district, dong)',
-      )
-      .order('created_at', { ascending: false })
-      .limit(100)
-      .then(({ data, error }) => {
-        if (!alive) return
-        setLoading(false)
-        if (error) {
-          console.error('[community fetch]', error)
-          return
-        }
-        setAllPosts((data as unknown as PostRow[]).map(rowToPost))
-      })
+    fetchPosts().catch((e) => {
+      if (!alive) return
+      console.error('[community fetch unexpected]', e)
+      setErr(e instanceof Error ? e.message : String(e))
+      setLoading(false)
+    })
     return () => {
       alive = false
     }
-  }, [])
+  }, [fetchPosts, tick])
 
   const cityFiltered = useMemo(
     () =>
@@ -137,6 +199,15 @@ export default function CommunityPage() {
             COMMUNITY
           </div>
           <div style={{ flex: 1 }} />
+          <PixelButton
+            sm
+            color="#111"
+            bg="var(--paper)"
+            onClick={() => setTick((t) => t + 1)}
+            style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            ↻
+          </PixelButton>
           <PixelButton
             sm
             color="#111"
@@ -306,6 +377,31 @@ export default function CommunityPage() {
           minHeight: 0,
         }}
       >
+        {err && (
+          <div
+            style={{
+              padding: '10px 12px',
+              border: '2px solid var(--red)',
+              background: '#FCE7E7',
+              color: 'var(--red)',
+              fontSize: 11,
+              fontWeight: 700,
+              lineHeight: 1.4,
+            }}
+          >
+            ✕ {err}
+            <div style={{ marginTop: 6 }}>
+              <PixelButton
+                sm
+                color="#111"
+                bg="var(--paper)"
+                onClick={() => setTick((t) => t + 1)}
+              >
+                ↻ 다시 시도
+              </PixelButton>
+            </div>
+          </div>
+        )}
         {loading ? (
           <div
             style={{
@@ -322,7 +418,7 @@ export default function CommunityPage() {
             {feed.map((p) => (
               <PostCard key={p.id} p={p} onClick={() => navigate(`/post/${p.id}`)} />
             ))}
-            {feed.length === 0 && (
+            {feed.length === 0 && !err && (
               <div
                 style={{
                   padding: 24,

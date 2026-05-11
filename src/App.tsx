@@ -11,6 +11,10 @@ import CommunityPage from '@/pages/CommunityPage'
 import PostDetailPage from '@/pages/PostDetailPage'
 import ProfilePage from '@/pages/ProfilePage'
 import ShopDetailPage from '@/pages/ShopDetailPage'
+import NoticesPage from '@/pages/NoticesPage'
+import InquiryPage from '@/pages/InquiryPage'
+import PolicyPage from '@/pages/PolicyPage'
+import AdminPage from '@/pages/AdminPage'
 
 export default function App() {
   return (
@@ -22,11 +26,15 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/auth-wall" element={<AuthWallPage />} />
+      <Route path="/notices" element={<NoticesPage />} />
+      <Route path="/policy" element={<PolicyPage />} />
       <Route element={<RequireAuth />}>
         <Route path="/post" element={<PostPage />} />
         <Route path="/community" element={<CommunityPage />} />
         <Route path="/post/:id" element={<PostDetailPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/inquiry" element={<InquiryPage />} />
+        <Route path="/admin" element={<AdminPage />} />
       </Route>
     </Routes>
   )

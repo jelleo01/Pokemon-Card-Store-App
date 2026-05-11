@@ -117,12 +117,15 @@ export function mePinHtml(): string {
   )
 }
 
-// NEW marker for PostPage new-place mode
+// NEW marker for PostPage new-place mode.
+// Wrapper has 0 size so its origin is exactly at the lat/lng (with xAnchor/yAnchor=0).
+// Red square is absolutely positioned with translate(-50%,-50%) so its CENTER sits on the origin.
+// "NEW" label hangs below the square via absolute positioning.
 export function newPinHtml(): string {
   return (
-    `<div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-50%);">` +
-    `<div style="width:14px;height:14px;background:#E63946;border:2px solid #111;box-shadow:0 0 0 4px rgba(230,57,70,0.25);"></div>` +
-    `<div style="margin-top:2px;font-family:${FONT};font-size:9px;font-weight:700;padding:1px 4px;background:#FAFAF7;border:2px solid #111;white-space:nowrap;">NEW</div>` +
+    `<div style="position:relative;width:0;height:0;">` +
+    `<div style="position:absolute;left:0;top:0;width:18px;height:18px;background:#E63946;border:2px solid #111;box-shadow:0 0 0 4px rgba(230,57,70,0.25);transform:translate(-50%,-50%);"></div>` +
+    `<div style="position:absolute;left:0;top:14px;transform:translateX(-50%);font-family:${FONT};font-size:9px;font-weight:700;padding:1px 4px;background:#FAFAF7;border:2px solid #111;white-space:nowrap;">NEW</div>` +
     `</div>`
   )
 }

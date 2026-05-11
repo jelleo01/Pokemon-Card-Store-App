@@ -1,3 +1,5 @@
+import { gbStyles } from '@/lib/gbStyles'
+
 interface RowProps {
   k: string
   v: React.ReactNode
@@ -10,7 +12,7 @@ export default function Row({ k, v }: RowProps) {
         display: 'flex',
         alignItems: 'baseline',
         gap: 8,
-        fontSize: 11,
+        fontSize: 12,
         padding: '3px 0',
         borderBottom: '1px dashed rgba(0,0,0,0.2)',
       }}
@@ -29,8 +31,8 @@ export default function Row({ k, v }: RowProps) {
       <div
         style={{
           flex: 1,
-          fontWeight: 700,
-          fontFamily: 'Geist, Galmuri11, monospace',
+          fontWeight: 600,
+          fontFamily: gbStyles.fontReadable,
           wordBreak: 'keep-all',
         }}
       >

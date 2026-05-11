@@ -1,20 +1,25 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import GBTabBar from '@/components/ui/GBTabBar'
 import PixelBorder from '@/components/ui/PixelBorder'
 import PixelButton from '@/components/ui/PixelButton'
 import PixelInput from '@/components/ui/PixelInput'
-import PixelMiniBtn from '@/components/ui/PixelMiniBtn'
 import TypePin from '@/components/ui/TypePin'
 import SectionLabel from '@/components/ui/SectionLabel'
 import ModeToggle from '@/components/ui/ModeToggle'
 import CategoryCard from '@/components/ui/CategoryCard'
 import Field from '@/components/ui/Field'
 import BackButton from '@/components/ui/BackButton'
-import KakaoMap from '@/components/ui/KakaoMap'
+import KakaoMap, { type KakaoMapHandle } from '@/components/ui/KakaoMap'
 import { SHOPS, SHOP_TYPES, type ShopType } from '@/lib/data'
 import { gbStyles } from '@/lib/gbStyles'
-import type { LatLng } from '@/lib/kakao'
+import {
+  findPlacesAt,
+  haversine as haversineKm,
+  searchPlaces,
+  type KakaoPlace,
+  type LatLng,
+} from '@/lib/kakao'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 
@@ -52,6 +57,91 @@ export default function PostPage() {
   const [newAddr, setNewAddr] = useState('')
   const [newType, setNewType] = useState<ShopType>('카드샵')
   const [newCoord, setNewCoord] = useState<LatLng>(NEW_PIN_DEFAULT)
+  const newMapRef = useRef<KakaoMapHandle>(null)
+
+  // 카카오 Places 자동완성 — 새 장소 모드의 이름 입력에서 검색
+  const [searchResults, setSearchResults] = useState<KakaoPlace[]>([])
+  const [searching, setSearching] = useState(false)
+  const [pickedPlace, setPickedPlace] = useState(false) // 사용자가 결과를 골랐는지 (다음 입력 시 다시 검색)
+
+  useEffect(() => {
+    if (placeMode !== 'new') return
+    if (pickedPlace) return // 결과 픽 직후엔 검색 멈춤
+    const q = newName.trim()
+    if (q.length < 2) {
+      setSearchResults([])
+      return
+    }
+    let alive = true
+    setSearching(true)
+    const t = setTimeout(async () => {
+      const results = await searchPlaces(q, 8)
+      if (!alive) return
+      setSearching(false)
+      setSearchResults(results)
+    }, 300)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [newName, placeMode, pickedPlace])
+
+  function guessType(category: string, name: string): ShopType {
+    const c = category + ' ' + name
+    if (c.includes('편의점') || /CU|GS25|세븐일레븐|이마트24|미니스톱/i.test(c)) return '편의점'
+    if (c.includes('포켓몬') && c.includes('센터')) return '공식'
+    return '카드샵'
+  }
+
+  function pickPlace(p: KakaoPlace) {
+    setNewName(p.name)
+    setNewAddr(p.addr)
+    setNewCoord({ lat: p.lat, lng: p.lng })
+    setNewType(guessType(p.category, p.name))
+    setSearchResults([])
+    setPickedPlace(true)
+    setTapCandidates([])
+    newMapRef.current?.panTo({ lat: p.lat, lng: p.lng })
+  }
+
+  // 지도 탭 → 그 지점 근처의 카카오 등록 장소들을 찾아 후보 popup 으로 보여줌.
+  // 사용자가 후보 중에서 고르면 거기로 스냅. 후보 없으면 임의 좌표 그대로.
+  const [tapCandidates, setTapCandidates] = useState<KakaoPlace[]>([])
+  const [tapLoading, setTapLoading] = useState(false)
+  const [tapNoResult, setTapNoResult] = useState(false)
+
+  async function handleMapTap(c: LatLng) {
+    setNewCoord(c) // 즉시 핀 이동 — 시각적 피드백
+    setTapLoading(true)
+    setTapNoResult(false)
+    setTapCandidates([])
+
+    // 1단계: 매우 좁은 radius — 사용자가 POI 라벨을 정확히 탭한 케이스
+    let places = await findPlacesAt(c, 30)
+    // 가장 가까운 1개가 매우 가까우면(15m 이내) 자동 픽
+    if (places.length >= 1 && places[0]) {
+      const top = places[0]
+      const d = haversineKm(c, { lat: top.lat, lng: top.lng })
+      if (d * 1000 <= 15) {
+        setTapLoading(false)
+        pickPlace(top)
+        return
+      }
+    }
+    if (places.length > 0) {
+      setTapLoading(false)
+      setTapCandidates(places.slice(0, 6))
+      return
+    }
+    // 2단계: 살짝 넓은 radius — 가까이엔 없지만 근처에 등록된 장소가 있을 때
+    places = await findPlacesAt(c, 120)
+    setTapLoading(false)
+    if (places.length === 0) {
+      setTapNoResult(true)
+      return
+    }
+    setTapCandidates(places.slice(0, 6))
+  }
 
   const open = SHOPS.find((s) => s.id === shopId) ?? SHOPS[0]
   const stockTags = ['신상 박스 입고', '잔여 적음', '품절', '재입고 예정', '싱글 카드']
@@ -171,11 +261,14 @@ export default function PostPage() {
     }
   }
 
+  // 지도 중심: 모드/매장 변경 시에만 새로 잡힘.
+  // 새 장소 모드에서 newCoord 가 바뀌어도 지도가 따라 움직이지 않게 의도적으로 의존성에서 제외.
+  // (user 가 탭으로 핀을 옮길 때 지도가 같이 움직이면 어지러움)
   const mapCenter = useMemo<LatLng>(() => {
-    if (placeMode === 'new') return newCoord
+    if (placeMode === 'new') return NEW_PIN_DEFAULT
     if (open) return { lat: open.lat, lng: open.lng }
     return NEW_PIN_DEFAULT
-  }, [placeMode, open, newCoord])
+  }, [placeMode, open])
 
   return (
     <div
@@ -199,7 +292,7 @@ export default function PostPage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <BackButton onClick={() => navigate('/')} width={28} height={24} />
+          <BackButton onClick={() => navigate(-1)} width={28} height={24} />
           <div
             style={{
               fontSize: 16,
@@ -225,6 +318,22 @@ export default function PostPage() {
         <div style={{ fontSize: 10, marginTop: 6, opacity: 0.6, letterSpacing: 1 }}>
           ※ 매장 소식 / 질문을 남겨보세요
         </div>
+        {err && (
+          <div
+            style={{
+              marginTop: 8,
+              padding: '6px 8px',
+              border: '2px solid var(--red)',
+              background: '#FCE7E7',
+              color: 'var(--red)',
+              fontSize: 11,
+              fontWeight: 700,
+              textAlign: 'center',
+            }}
+          >
+            ✕ {err}
+          </div>
+        )}
       </div>
 
       {/* Body */}
@@ -252,50 +361,181 @@ export default function PostPage() {
               }}
             >
               <KakaoMap
+                ref={newMapRef}
                 center={mapCenter}
                 level={placeMode === 'new' ? 5 : 4}
                 interactive={placeMode === 'new'}
                 simplePins
                 shops={placeMode === 'existing' && open ? [open] : []}
-                onIdle={
-                  placeMode === 'new'
-                    ? (c) => setNewCoord(c)
-                    : undefined
-                }
+                newPin={placeMode === 'new' ? newCoord : null}
+                onMapClick={placeMode === 'new' ? handleMapTap : undefined}
               />
-              {/* 새 장소 모드: 지도 정중앙 고정 핀 (CSS overlay) */}
-              {placeMode === 'new' && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -100%)',
-                    pointerEvents: 'none',
-                    fontSize: 26,
-                    lineHeight: 1,
-                    filter: 'drop-shadow(0 1px 0 #111)',
-                  }}
-                >
-                  📍
-                </div>
-              )}
-              {placeMode === 'new' && (
+
+              {/* 새 장소 모드: 안내 + 후보 popup */}
+              {placeMode === 'new' &&
+                tapCandidates.length === 0 &&
+                !tapLoading &&
+                !tapNoResult && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: 6,
+                      left: 6,
+                      right: 6,
+                      fontSize: 11,
+                      padding: '4px 8px',
+                      background: 'rgba(255,255,255,0.92)',
+                      border: '2px solid #111',
+                      textAlign: 'center',
+                      fontFamily: gbStyles.fontReadable,
+                      fontWeight: 600,
+                    }}
+                  >
+                    지도를 탭해서 등록된 장소를 선택하세요
+                  </div>
+                )}
+
+              {placeMode === 'new' && tapLoading && (
                 <div
                   style={{
                     position: 'absolute',
                     bottom: 6,
                     left: 6,
                     right: 6,
-                    fontSize: 9,
-                    padding: '3px 6px',
-                    background: 'rgba(255,255,255,0.85)',
+                    fontSize: 11,
+                    padding: '4px 8px',
+                    background: 'rgba(255,255,255,0.92)',
                     border: '2px solid #111',
                     textAlign: 'center',
-                    fontFamily: gbStyles.fontEn,
+                    fontFamily: gbStyles.fontReadable,
                   }}
                 >
-                  지도를 움직여 핀 위치를 정해주세요
+                  주변 장소 찾는 중…
+                </div>
+              )}
+
+              {placeMode === 'new' && tapNoResult && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 6,
+                    left: 6,
+                    right: 6,
+                    fontSize: 11,
+                    padding: '6px 8px',
+                    background: 'rgba(255,255,255,0.95)',
+                    border: '2px solid #111',
+                    fontFamily: gbStyles.fontReadable,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <span>이 위치엔 등록된 장소가 없어요. 그대로 사용할까요?</span>
+                  <button
+                    onClick={() => setTapNoResult(false)}
+                    style={{
+                      fontSize: 10,
+                      padding: '2px 8px',
+                      border: '2px solid #111',
+                      background: 'var(--paper)',
+                      cursor: 'pointer',
+                      fontFamily: gbStyles.fontReadable,
+                      fontWeight: 700,
+                      flexShrink: 0,
+                    }}
+                  >
+                    OK
+                  </button>
+                </div>
+              )}
+
+              {placeMode === 'new' && tapCandidates.length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 6,
+                    left: 6,
+                    right: 6,
+                    maxHeight: 180,
+                    overflowY: 'auto',
+                    background: 'rgba(255,255,255,0.97)',
+                    border: '2px solid #111',
+                    fontFamily: gbStyles.fontReadable,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '4px 8px',
+                      borderBottom: '2px solid #111',
+                      background: '#111',
+                      color: '#FAFAF7',
+                    }}
+                  >
+                    <span style={{ fontSize: 11, fontWeight: 700, flex: 1 }}>
+                      이 근처 등록된 장소
+                    </span>
+                    <button
+                      onClick={() => setTapCandidates([])}
+                      style={{
+                        fontSize: 10,
+                        padding: '1px 6px',
+                        border: '2px solid #FAFAF7',
+                        background: 'transparent',
+                        color: '#FAFAF7',
+                        cursor: 'pointer',
+                        fontFamily: gbStyles.fontReadable,
+                        fontWeight: 700,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {tapCandidates.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => pickPlace(p)}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '6px 8px',
+                        border: 'none',
+                        borderBottom: '1px dashed rgba(0,0,0,0.15)',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        fontFamily: gbStyles.fontReadable,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {p.name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 10,
+                          color: 'var(--ink-2)',
+                          marginTop: 1,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {p.addr || p.category}
+                      </div>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -329,12 +569,21 @@ export default function PostPage() {
               >
                 <TypePin type={open?.type ?? '카드샵'} size={14} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700 }}>{open?.name ?? '매장 선택'}</div>
                   <div
                     style={{
-                      fontSize: 10,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      fontFamily: gbStyles.fontReadable,
+                    }}
+                  >
+                    {open?.name ?? '매장 선택'}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
                       opacity: 0.7,
-                      fontFamily: gbStyles.fontEn,
+                      fontFamily: gbStyles.fontReadable,
+                      marginTop: 2,
                     }}
                   >
                     {open ? `${open.type} · ${open.addr}` : ''}
@@ -380,8 +629,8 @@ export default function PostPage() {
                             border: 'none',
                             outline: 'none',
                             background: 'transparent',
-                            fontFamily: gbStyles.font,
-                            fontSize: 11,
+                            fontFamily: gbStyles.fontReadable,
+                            fontSize: 13,
                           }}
                         />
                         {pickerQ && (
@@ -416,8 +665,10 @@ export default function PostPage() {
                             style={{
                               padding: 16,
                               textAlign: 'center',
-                              fontSize: 11,
+                              fontSize: 12,
                               color: 'var(--ink-2)',
+                              fontFamily: gbStyles.fontReadable,
+                              lineHeight: 1.6,
                             }}
                           >
                             검색 결과가 없어요. <br />
@@ -452,20 +703,22 @@ export default function PostPage() {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div
                               style={{
-                                fontSize: 11,
+                                fontSize: 12,
                                 fontWeight: 700,
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
+                                fontFamily: gbStyles.fontReadable,
                               }}
                             >
                               {s.name}
                             </div>
                             <div
                               style={{
-                                fontSize: 9,
-                                opacity: 0.65,
-                                fontFamily: gbStyles.fontEn,
+                                fontSize: 11,
+                                opacity: 0.7,
+                                fontFamily: gbStyles.fontReadable,
+                                marginTop: 1,
                               }}
                             >
                               {s.addr}
@@ -480,18 +733,92 @@ export default function PostPage() {
             </PixelBorder>
           ) : (
             <PixelBorder color="#111" bg="var(--paper-2)" padding={10}>
-              <Field label="이름">
-                <PixelInput
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value.slice(0, 40))}
-                  placeholder="예) 카드매니아 강남점"
-                />
+              <Field label="이름 (입력하면 카카오 장소 검색)">
+                <div style={{ position: 'relative' }}>
+                  <PixelInput
+                    value={newName}
+                    onChange={(e) => {
+                      setNewName(e.target.value.slice(0, 40))
+                      setPickedPlace(false) // 다시 입력하면 검색 재개
+                    }}
+                    placeholder="예) 포켓몬 카드 강남"
+                  />
+                  {searching && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        right: 8,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        fontSize: 10,
+                        color: 'var(--ink-2)',
+                        fontFamily: gbStyles.fontReadable,
+                      }}
+                    >
+                      검색 중…
+                    </span>
+                  )}
+                </div>
+                {searchResults.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: 4,
+                      border: '2px solid #111',
+                      background: 'var(--paper)',
+                      maxHeight: 180,
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {searchResults.map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => pickPlace(r)}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '6px 8px',
+                          border: 'none',
+                          borderBottom: '1px dashed rgba(0,0,0,0.15)',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          fontFamily: gbStyles.fontReadable,
+                          color: '#111',
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {r.name}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: 'var(--ink-2)',
+                            marginTop: 1,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {r.addr || r.category}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </Field>
               <Field label="주소">
                 <PixelInput
                   value={newAddr}
                   onChange={(e) => setNewAddr(e.target.value.slice(0, 80))}
-                  placeholder="(선택) 도로명 주소"
+                  placeholder="(선택) 도로명 주소 — 카카오 검색 시 자동 입력"
                 />
               </Field>
               <Field label="분류">
@@ -503,14 +830,15 @@ export default function PostPage() {
                         key={t}
                         onClick={() => setNewType(t)}
                         style={{
-                          fontSize: 9,
-                          padding: '3px 6px',
+                          fontSize: 11,
+                          padding: '4px 8px',
                           border: '2px solid #111',
                           background: on ? '#111' : 'var(--paper)',
                           color: on ? '#FAFAF7' : '#111',
-                          letterSpacing: 1,
+                          letterSpacing: 0.5,
                           cursor: 'pointer',
-                          fontFamily: gbStyles.font,
+                          fontFamily: gbStyles.fontReadable,
+                          fontWeight: 600,
                         }}
                       >
                         {t}
@@ -521,10 +849,10 @@ export default function PostPage() {
               </Field>
               <div
                 style={{
-                  fontSize: 9,
-                  opacity: 0.6,
+                  fontSize: 10,
+                  opacity: 0.65,
                   marginTop: 6,
-                  fontFamily: gbStyles.fontEn,
+                  fontFamily: gbStyles.fontReadable,
                 }}
               >
                 좌표: {newCoord.lat.toFixed(5)}, {newCoord.lng.toFixed(5)}
@@ -568,14 +896,15 @@ export default function PostPage() {
                     key={t}
                     onClick={() => setStock(on ? '' : t)}
                     style={{
-                      fontSize: 10,
-                      padding: '4px 8px',
+                      fontSize: 12,
+                      padding: '5px 10px',
                       border: '2px solid #111',
                       background: on ? 'var(--red)' : 'var(--paper)',
                       color: on ? '#FAFAF7' : '#111',
                       cursor: 'pointer',
-                      fontFamily: gbStyles.font,
-                      letterSpacing: 1,
+                      fontFamily: gbStyles.fontReadable,
+                      letterSpacing: 0.3,
+                      fontWeight: 600,
                     }}
                   >
                     {on ? '☑ ' : '+ '}
@@ -608,9 +937,9 @@ export default function PostPage() {
                 background: 'transparent',
                 padding: 10,
                 boxSizing: 'border-box',
-                fontFamily: gbStyles.font,
-                fontSize: 12,
-                lineHeight: 1.5,
+                fontFamily: gbStyles.fontReadable,
+                fontSize: 14,
+                lineHeight: 1.6,
                 color: 'var(--ink)',
               }}
             />
@@ -624,14 +953,12 @@ export default function PostPage() {
                 gap: 8,
               }}
             >
-              <PixelMiniBtn>📷 사진</PixelMiniBtn>
-              <PixelMiniBtn>@ 매장태그</PixelMiniBtn>
               <div style={{ flex: 1 }} />
               <span
                 style={{
-                  fontSize: 9,
+                  fontSize: 10,
                   color: 'var(--ink-2)',
-                  fontFamily: gbStyles.fontEn,
+                  fontFamily: gbStyles.fontReadable,
                 }}
               >
                 {body.length}/280
@@ -639,22 +966,6 @@ export default function PostPage() {
             </div>
           </PixelBorder>
         </div>
-
-        {err && (
-          <div
-            style={{
-              padding: '8px 10px',
-              border: '2px solid var(--red)',
-              background: '#FCE7E7',
-              color: 'var(--red)',
-              fontSize: 11,
-              fontWeight: 700,
-              textAlign: 'center',
-            }}
-          >
-            ✕ {err}
-          </div>
-        )}
 
         <div style={{ height: 8 }} />
       </div>
@@ -710,16 +1021,24 @@ export default function PostPage() {
                 </div>
                 <div
                   style={{
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: 700,
-                    letterSpacing: 1,
-                    fontFamily: gbStyles.fontEn,
+                    letterSpacing: 0.5,
+                    fontFamily: gbStyles.fontReadable,
                     color: '#1a8a3e',
                   }}
                 >
                   등록 완료!
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--ink-2)', textAlign: 'center', lineHeight: 1.5 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--ink-2)',
+                    textAlign: 'center',
+                    lineHeight: 1.6,
+                    fontFamily: gbStyles.fontReadable,
+                  }}
+                >
                   아래 탭바에서 커뮤니티로 이동하거나
                   <br />
                   계속 글을 쓸 수 있어요.

@@ -13,7 +13,6 @@ import { SHOPS, SHOP_TYPES, type ShopType } from '@/lib/data'
 import { gbStyles } from '@/lib/gbStyles'
 import {
   getCurrentPosition,
-  getDirectionsUrl,
   haversine,
   searchPlaces,
   type KakaoPlace,
@@ -222,7 +221,7 @@ export default function MapPage() {
       <div
         style={{
           position: 'relative',
-          height: 190,
+          height: 240,
           borderBottom: '2px solid #111',
           overflow: 'hidden',
           background: '#EEECE2',
@@ -388,6 +387,95 @@ export default function MapPage() {
         )}
       </div>
 
+      {/* 선택된 매장 DETAIL — 지도/필터 바로 아래 고정. 핀이나 리스트 행 클릭 시 표시 */}
+      {open && (
+        <div
+          style={{
+            borderBottom: '2px solid #111',
+            background: 'var(--paper-2)',
+            padding: 10,
+            flexShrink: 0,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              marginBottom: 6,
+            }}
+          >
+            <TypePin type={open.type} size={16} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  fontFamily: gbStyles.fontReadable,
+                }}
+              >
+                {open.name}
+              </div>
+              <div
+                style={{
+                  fontSize: 9,
+                  letterSpacing: 1,
+                  fontFamily: gbStyles.fontEn,
+                  opacity: 0.6,
+                }}
+              >
+                ▼ DETAIL
+              </div>
+            </div>
+            <button
+              onClick={() => selectShop(null)}
+              style={{
+                padding: '2px 8px',
+                border: '2px solid #111',
+                background: 'var(--paper)',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontFamily: gbStyles.font,
+                fontWeight: 700,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+          <Row k="위치" v={open.addr} />
+          <Row k="거리" v={`${open.dist}km`} />
+          <Row k="분류" v={open.type} />
+          <Row k="재고" v="—" />
+          <Row k="소식" v={`${newsCount[open.id] ?? 0}건`} />
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <PixelButton
+              sm
+              full
+              color="#111"
+              bg="var(--paper)"
+              onClick={() => navigate(`/post?shopId=${open.id}`)}
+              style={{ fontFamily: gbStyles.fontReadable, fontSize: 12 }}
+            >
+              ✎ 수정하기
+            </PixelButton>
+            <PixelButton
+              sm
+              full
+              color="#111"
+              bg="var(--red)"
+              fg="#FAFAF7"
+              onClick={() => navigate(`/shop/${open.id}`)}
+              style={{ fontFamily: gbStyles.fontReadable, fontSize: 12 }}
+            >
+              더 자세히 ▶
+            </PixelButton>
+          </div>
+        </div>
+      )}
+
       {/* Shop list */}
       <div
         style={{
@@ -429,11 +517,12 @@ export default function MapPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         style={{
-                          fontSize: 12,
+                          fontSize: 13,
                           fontWeight: 700,
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
+                          fontFamily: gbStyles.fontReadable,
                         }}
                       >
                         {s.name}
@@ -449,78 +538,10 @@ export default function MapPage() {
                         {s.dist}km · {s.type}
                       </div>
                     </div>
-                    <div
-                      role="link"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        window.open(getDirectionsUrl(s), '_blank', 'noopener,noreferrer')
-                      }}
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        padding: '4px 8px',
-                        background: 'var(--red)',
-                        color: '#FAFAF7',
-                        border: '2px solid ' + (isOpen ? '#FAFAF7' : '#111'),
-                        fontFamily: gbStyles.fontEn,
-                        letterSpacing: 1,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      GO ▶
-                    </div>
+                    <span style={{ fontSize: 10, opacity: 0.6 }}>{isOpen ? '▼' : '▶'}</span>
                   </div>
                 </PixelBorder>
               </button>
-
-              {isOpen && open && (
-                <div style={{ marginTop: -2 }}>
-                  <PixelBorder color="#111" bg="var(--paper-2)" padding={10}>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        letterSpacing: 2,
-                        marginBottom: 6,
-                        fontFamily: gbStyles.fontEn,
-                      }}
-                    >
-                      ▼ DETAIL
-                    </div>
-                    <Row k="위치" v={open.addr} />
-                    <Row k="거리" v={`${open.dist}km`} />
-                    <Row k="분류" v={open.type} />
-                    <Row k="재고" v="—" />
-                    <Row k="소식" v={`${newsCount[open.id] ?? 0}건`} />
-                    <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                      <PixelButton
-                        sm
-                        full
-                        color="#111"
-                        bg="var(--paper)"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          navigate(`/post?shopId=${open.id}`)
-                        }}
-                      >
-                        ✎ 수정하기
-                      </PixelButton>
-                      <PixelButton
-                        sm
-                        full
-                        color="#111"
-                        bg="var(--red)"
-                        fg="#FAFAF7"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          navigate(`/shop/${open.id}`)
-                        }}
-                      >
-                        더 자세히 ▶
-                      </PixelButton>
-                    </div>
-                  </PixelBorder>
-                </div>
-              )}
             </div>
           )
         })}
@@ -531,9 +552,12 @@ export default function MapPage() {
               textAlign: 'center',
               fontSize: 11,
               color: 'var(--ink-2)',
+              lineHeight: 1.6,
             }}
           >
-            ☐ 모든 분류가 꺼져있어요. FILTER에서 켜주세요.
+            {active.length === 0
+              ? '☐ 모든 분류가 꺼져있어요. FILTER에서 켜주세요.'
+              : '해당 종류의 판매점이 없습니다.'}
           </div>
         )}
         {sorted.length > visibleCount && (

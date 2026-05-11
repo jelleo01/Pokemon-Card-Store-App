@@ -27,33 +27,49 @@ export default function PostCard({ p, compact, onClick }: PostCardProps) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
             <span
               style={{
-                fontSize: 9,
-                padding: '1px 5px',
+                fontSize: 10,
+                padding: '1px 6px',
                 border: '2px solid #111',
                 background: isAsk ? 'var(--paper)' : 'var(--red)',
                 color: isAsk ? '#111' : '#FAFAF7',
-                letterSpacing: 1,
+                letterSpacing: 0.5,
                 fontWeight: 700,
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
+                fontFamily: gbStyles.fontReadable,
               }}
             >
               {isAsk ? '? 질문' : '★ 소식'}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--ink-2)' }}>{p.loc}</span>
+            <span
+              style={{
+                fontSize: 11,
+                color: 'var(--ink-2)',
+                fontFamily: gbStyles.fontReadable,
+              }}
+            >
+              {p.loc}
+            </span>
             <div style={{ flex: 1 }} />
             <span
               style={{
-                fontSize: 9,
+                fontSize: 10,
                 color: 'var(--ink-2)',
-                fontFamily: gbStyles.fontEn,
-                letterSpacing: 1,
+                fontFamily: gbStyles.fontReadable,
               }}
             >
               {p.mins}m
             </span>
           </div>
-          <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.5, marginBottom: 4 }}>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              lineHeight: 1.55,
+              marginBottom: 4,
+              fontFamily: gbStyles.fontReadable,
+            }}
+          >
             {p.t}
           </div>
           <div
@@ -61,8 +77,9 @@ export default function PostCard({ p, compact, onClick }: PostCardProps) {
               display: 'flex',
               alignItems: 'center',
               gap: 10,
-              fontSize: 10,
+              fontSize: 11,
               color: 'var(--ink-2)',
+              fontFamily: gbStyles.fontReadable,
             }}
           >
             <span>by {p.who}</span>

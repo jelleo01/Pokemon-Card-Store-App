@@ -21,7 +21,16 @@ export default function SectionLabel({ n, label }: SectionLabelProps) {
       >
         {n}
       </span>
-      <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: 1 }}>{label}</span>
+      <span
+        style={{
+          fontSize: 14,
+          fontWeight: 700,
+          letterSpacing: 0.5,
+          fontFamily: gbStyles.fontReadable,
+        }}
+      >
+        {label}
+      </span>
     </div>
   )
 }

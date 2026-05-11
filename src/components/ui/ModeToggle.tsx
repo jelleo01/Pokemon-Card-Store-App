@@ -20,8 +20,8 @@ export default function ModeToggle({ children, active, onClick }: ModeToggleProp
         color: '#111',
         boxShadow: active ? '1px 1px 0 0 #111' : '3px 3px 0 0 #111',
         transform: active ? 'translate(2px, 2px)' : 'translate(0, 0)',
-        fontFamily: gbStyles.font,
-        fontSize: 11,
+        fontFamily: gbStyles.fontReadable,
+        fontSize: 13,
         fontWeight: 700,
         transition: 'transform 60ms, box-shadow 60ms',
       }}

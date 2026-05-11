@@ -13,22 +13,27 @@ interface PostRow {
   id: string
   body: string
   category: 'news' | 'ask'
-  hearts_count: number
-  comments_count: number
+  hearts_count: number | null
+  comments_count: number | null
   created_at: string
-  profiles: { trainer_id: string } | null
+  user_id: string
+}
+
+interface ProfileRow {
+  id: string
+  trainer_id: string
 }
 
 function minsAgo(iso: string): number {
   return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
 }
 
-function rowToPost(r: PostRow, loc: string): Post {
+function buildPost(r: PostRow, profile: ProfileRow | undefined, loc: string): Post {
   const firstLine = r.body.split('\n')[0]
   const t = firstLine.length > 40 ? firstLine.slice(0, 40) + '…' : firstLine
   return {
     id: r.id,
-    who: r.profiles?.trainer_id ?? '익명',
+    who: profile?.trainer_id ?? '익명',
     loc,
     dong: '',
     t,
@@ -51,6 +56,8 @@ export default function ShopDetailPage() {
 
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
 
   useEffect(() => {
     if (!shop) {
@@ -59,44 +66,73 @@ export default function ShopDetailPage() {
     }
     let alive = true
     setLoading(true)
+    setErr(null)
 
-    // 매장의 supabase uuid 찾고, 그걸로 posts 가져오기
-    supabase
-      .from('shops')
-      .select('id')
-      .eq('name', shop.name)
-      .eq('lat', shop.lat)
-      .eq('lng', shop.lng)
-      .maybeSingle()
-      .then(({ data: shopRow }) => {
-        if (!alive) return
-        if (!shopRow) {
-          setPosts([])
-          setLoading(false)
-          return
-        }
-        supabase
-          .from('posts')
-          .select(
-            'id, body, category, hearts_count, comments_count, created_at, profiles(trainer_id)',
-          )
-          .eq('shop_id', shopRow.id)
-          .order('created_at', { ascending: false })
-          .then(({ data, error }) => {
-            if (!alive) return
-            setLoading(false)
-            if (error) {
-              console.error('[shop posts fetch]', error)
-              return
-            }
-            const loc = shop.addr.split(' ').slice(0, 2).join(' ')
-            setPosts((data as unknown as PostRow[]).map((r) => rowToPost(r, loc)))
-          })
-      })
+    ;(async () => {
+      // 1) shops 테이블에서 매장 uuid 찾기 (이름+좌표로)
+      const { data: shopRow, error: shopErr } = await supabase
+        .from('shops')
+        .select('id')
+        .eq('name', shop.name)
+        .eq('lat', shop.lat)
+        .eq('lng', shop.lng)
+        .maybeSingle()
+      if (!alive) return
+      if (shopErr) {
+        console.error('[shop lookup]', shopErr)
+        setErr(`매장 조회 실패: ${shopErr.message}`)
+        setLoading(false)
+        return
+      }
+      if (!shopRow) {
+        // 아직 supabase 에 등록되지 않은 매장 → 글이 있을 수 없음
+        setPosts([])
+        setLoading(false)
+        return
+      }
+
+      // 2) 그 매장의 posts
+      const { data: postRows, error: postErr } = await supabase
+        .from('posts')
+        .select('id, body, category, hearts_count, comments_count, created_at, user_id')
+        .eq('shop_id', shopRow.id)
+        .order('created_at', { ascending: false })
+      if (!alive) return
+      if (postErr) {
+        console.error('[shop posts]', postErr)
+        setErr(`글 목록 실패: ${postErr.message}`)
+        setLoading(false)
+        return
+      }
+      const rows = (postRows ?? []) as PostRow[]
+
+      // 3) 작성자 프로필
+      const userIds = Array.from(new Set(rows.map((r) => r.user_id)))
+      const profileMap = new Map<string, ProfileRow>()
+      if (userIds.length > 0) {
+        const { data: profiles, error: profErr } = await supabase
+          .from('profiles')
+          .select('id, trainer_id')
+          .in('id', userIds)
+        if (profErr) console.error('[shop profiles]', profErr)
+        for (const p of (profiles ?? []) as ProfileRow[]) profileMap.set(p.id, p)
+      }
+
+      const loc = shop.addr.split(' ').slice(0, 2).join(' ')
+      if (!alive) return
+      setPosts(rows.map((r) => buildPost(r, profileMap.get(r.user_id), loc)))
+      setLoading(false)
+    })().catch((e) => {
+      if (!alive) return
+      console.error('[shop detail unexpected]', e)
+      setErr(e instanceof Error ? e.message : String(e))
+      setLoading(false)
+    })
+
     return () => {
       alive = false
     }
-  }, [shop])
+  }, [shop, tick])
 
   if (!shop) {
     return (
@@ -155,6 +191,14 @@ export default function ShopDetailPage() {
           >
             {shop.name}
           </div>
+          <PixelButton
+            sm
+            color="#111"
+            bg="var(--paper)"
+            onClick={() => setTick((t) => t + 1)}
+          >
+            ↻
+          </PixelButton>
         </div>
       </div>
 
@@ -174,13 +218,21 @@ export default function ShopDetailPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <TypePin type={shop.type} size={20} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 700 }}>{shop.name}</div>
               <div
                 style={{
-                  fontSize: 10,
-                  opacity: 0.7,
-                  fontFamily: gbStyles.fontEn,
-                  marginTop: 2,
+                  fontSize: 16,
+                  fontWeight: 700,
+                  fontFamily: gbStyles.fontReadable,
+                }}
+              >
+                {shop.name}
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  opacity: 0.75,
+                  fontFamily: gbStyles.fontReadable,
+                  marginTop: 3,
                 }}
               >
                 {shop.type} · {shop.addr}
@@ -202,6 +254,32 @@ export default function ShopDetailPage() {
           >
             POSTS · {posts.length}
           </div>
+          {err && (
+            <div
+              style={{
+                padding: '10px 12px',
+                border: '2px solid var(--red)',
+                background: '#FCE7E7',
+                color: 'var(--red)',
+                fontSize: 11,
+                fontWeight: 700,
+                lineHeight: 1.4,
+                marginBottom: 8,
+              }}
+            >
+              ✕ {err}
+              <div style={{ marginTop: 6 }}>
+                <PixelButton
+                  sm
+                  color="#111"
+                  bg="var(--paper)"
+                  onClick={() => setTick((t) => t + 1)}
+                >
+                  ↻ 다시 시도
+                </PixelButton>
+              </div>
+            </div>
+          )}
           {loading ? (
             <div
               style={{
@@ -213,7 +291,7 @@ export default function ShopDetailPage() {
             >
               불러오는 중...
             </div>
-          ) : posts.length === 0 ? (
+          ) : posts.length === 0 && !err ? (
             <div
               style={{
                 padding: 24,

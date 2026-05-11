@@ -91,6 +91,108 @@ export async function searchPlaces(query: string, size = 10): Promise<KakaoPlace
   })
 }
 
+// 좌표 근처에서 키워드 검색. radius 단위 미터. 거리 가까운 순으로 반환.
+export async function searchPlacesNear(
+  query: string,
+  near: LatLng,
+  radius = 200,
+  size = 10,
+): Promise<KakaoPlace[]> {
+  if (!query.trim()) return []
+  await loadKakao()
+  return new Promise((resolve) => {
+    const places = new kakao.maps.services.Places()
+    const location = new kakao.maps.LatLng(near.lat, near.lng)
+    places.keywordSearch(
+      query,
+      (result, status) => {
+        if (status === kakao.maps.services.Status.OK) {
+          resolve(
+            result.slice(0, size).map((d) => ({
+              id: d.id,
+              name: d.place_name,
+              addr: d.road_address_name || d.address_name || '',
+              category: d.category_name || '',
+              lat: parseFloat(d.y),
+              lng: parseFloat(d.x),
+            })),
+          )
+        } else {
+          resolve([])
+        }
+      },
+      { location, radius, size },
+    )
+  })
+}
+
+// kakao Places categorySearch — 카테고리 코드 기반으로 좌표 근처 장소 검색.
+// 브랜드 매장(GS25, CU 등 편의점) 같이 동/구 키워드로는 안 잡히는 장소들을 잡으려고.
+async function categorySearchNear(
+  code: string,
+  near: LatLng,
+  radius: number,
+): Promise<KakaoPlace[]> {
+  await loadKakao()
+  return new Promise((resolve) => {
+    const places = new kakao.maps.services.Places()
+    const location = new kakao.maps.LatLng(near.lat, near.lng)
+    places.categorySearch(
+      code,
+      (result, status) => {
+        if (status === kakao.maps.services.Status.OK) {
+          resolve(
+            result.map((d) => ({
+              id: d.id,
+              name: d.place_name,
+              addr: d.road_address_name || d.address_name || '',
+              category: d.category_name || '',
+              lat: parseFloat(d.y),
+              lng: parseFloat(d.x),
+            })),
+          )
+        } else {
+          resolve([])
+        }
+      },
+      { location, radius },
+    )
+  })
+}
+
+// 탭 좌표 근처에 등록된 카카오 장소들을 찾아 거리순으로 반환.
+// 두 가지 검색을 병렬로 돌려 합침:
+//   1) 동/구 이름을 키워드로 keywordSearch — 카드샵, 식당 등 일반 장소
+//   2) 흔한 카테고리 코드 categorySearch — 편의점/카페/대형마트 등 브랜드 매장
+// id 기준 dedupe + haversine 거리순 정렬.
+export async function findPlacesAt(at: LatLng, radius = 40): Promise<KakaoPlace[]> {
+  const region = await reverseGeocode(at.lat, at.lng)
+  const keyword = region?.dong || region?.district || region?.city || ''
+
+  const tasks: Promise<KakaoPlace[]>[] = []
+  if (keyword) tasks.push(searchPlacesNear(keyword, at, radius, 15))
+  // CS2 편의점 / FD6 음식점 / CE7 카페 / MT1 대형마트 / BK9 은행 / HP8 병원 /
+  // PM9 약국 / CT1 문화시설 / OL7 주유소 / AT4 관광명소 / SW8 지하철역
+  for (const code of ['CS2', 'FD6', 'CE7', 'MT1', 'BK9', 'HP8', 'PM9', 'CT1', 'OL7', 'AT4', 'SW8']) {
+    tasks.push(categorySearchNear(code, at, radius))
+  }
+
+  const results = await Promise.all(tasks)
+  const seen = new Set<string>()
+  const merged: KakaoPlace[] = []
+  for (const list of results) {
+    for (const p of list) {
+      if (seen.has(p.id)) continue
+      seen.add(p.id)
+      merged.push(p)
+    }
+  }
+  return merged
+    .map((p) => ({ p, d: haversine(at, { lat: p.lat, lng: p.lng }) }))
+    .sort((a, b) => a.d - b.d)
+    .map((x) => x.p)
+}
+
 export async function reverseGeocode(lat: number, lng: number): Promise<KakaoRegion | null> {
   await loadKakao()
   return new Promise((resolve) => {

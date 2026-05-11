@@ -56,8 +56,21 @@ declare global {
     function load(callback: () => void): void
 
     namespace event {
-      function addListener(target: unknown, type: string, handler: () => void): void
-      function removeListener(target: unknown, type: string, handler: () => void): void
+      function addListener(
+        target: unknown,
+        type: string,
+        handler: (...args: unknown[]) => void,
+      ): void
+      function removeListener(
+        target: unknown,
+        type: string,
+        handler: (...args: unknown[]) => void,
+      ): void
+    }
+
+    interface MouseEvent {
+      latLng: LatLng
+      point: { x: number; y: number }
     }
 
     namespace services {
@@ -76,6 +89,11 @@ declare global {
       class Places {
         keywordSearch(
           query: string,
+          cb: (result: PlaceSearchResult[], status: string, pagination: unknown) => void,
+          options?: PlaceSearchOptions,
+        ): void
+        categorySearch(
+          code: string,
           cb: (result: PlaceSearchResult[], status: string, pagination: unknown) => void,
           options?: PlaceSearchOptions,
         ): void

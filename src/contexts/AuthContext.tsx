@@ -12,6 +12,7 @@ export interface TrainerUser {
   notifNews: boolean
   notifComment: boolean
   marketingOptIn: boolean
+  isAdmin: boolean
 }
 
 interface AuthContextValue {
@@ -26,11 +27,16 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 async function fetchProfile(session: Session): Promise<TrainerUser> {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('trainer_id, phone, city, district, notif_news, notif_comment, marketing_opt_in')
-    .eq('id', session.user.id)
-    .maybeSingle()
+  const [profileRes, adminRes] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('trainer_id, phone, city, district, notif_news, notif_comment, marketing_opt_in')
+      .eq('id', session.user.id)
+      .maybeSingle(),
+    supabase.rpc('is_admin', { uid: session.user.id }),
+  ])
+  const profile = profileRes.data
+  const isAdmin = adminRes.error ? false : !!adminRes.data
 
   return {
     id: session.user.id,
@@ -42,6 +48,7 @@ async function fetchProfile(session: Session): Promise<TrainerUser> {
     notifNews: profile?.notif_news ?? true,
     notifComment: profile?.notif_comment ?? true,
     marketingOptIn: profile?.marketing_opt_in ?? false,
+    isAdmin,
   }
 }
 

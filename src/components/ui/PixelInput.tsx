@@ -14,8 +14,8 @@ export default function PixelInput(props: PixelInputProps) {
         border: '2px solid #111',
         background: 'var(--paper)',
         boxSizing: 'border-box',
-        fontFamily: gbStyles.font,
-        fontSize: 11,
+        fontFamily: gbStyles.fontReadable,
+        fontSize: 13,
         outline: 'none',
         ...style,
       }}
