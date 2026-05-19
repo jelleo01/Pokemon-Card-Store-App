@@ -9,7 +9,19 @@ import { supabase } from '@/lib/supabase'
 import { gbStyles } from '@/lib/gbStyles'
 
 export default function HomePage() {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
+
+  // 세션/프로필 로딩 중엔 빈 화면 — Landing 이 flash 되는 걸 방지
+  if (loading) {
+    return (
+      <div
+        style={{
+          height: '100vh',
+          background: 'var(--paper)',
+        }}
+      />
+    )
+  }
 
   if (!user) return <Landing />
 

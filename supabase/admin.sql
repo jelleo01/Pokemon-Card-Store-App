@@ -102,6 +102,132 @@ create policy "app_meta: read all"     on app_meta for select using (true);
 create policy "app_meta: insert admin" on app_meta for insert with check (is_admin(auth.uid()));
 create policy "app_meta: update admin" on app_meta for update using (is_admin(auth.uid()));
 
+-- ─── is_admin 함수를 SECURITY DEFINER 로 재정의 ────────────
+-- 원본(schema.sql)은 SECURITY INVOKER 라서 admins 테이블 RLS 에 막혀
+-- 본인이 admin 인지 체크하는 것 자체가 불가능 (chicken-and-egg).
+-- DEFINER 로 만들어 RLS 우회.
+create or replace function is_admin(uid uuid) returns boolean
+language sql stable security definer
+set search_path = public
+as $$
+  select exists (select 1 from admins where user_id = uid);
+$$;
+revoke all on function is_admin(uuid) from public;
+grant execute on function is_admin(uuid) to authenticated, anon;
+
+-- ─── shops 추가 정책 (admin 삭제) ─────────────────────────
+drop policy if exists "shops: delete admin" on shops;
+create policy "shops: delete admin" on shops for delete using (is_admin(auth.uid()));
+
+-- ============================================================
+-- 관리자 전용 RPC 함수 (auth.users.email 접근, admin 권한 관리)
+-- ============================================================
+
+-- 가입자 목록 — auth.users 의 email 까지 join 해서 반환.
+-- security definer 로 auth.users 접근. 함수 내부에서 admin 권한 체크.
+create or replace function admin_list_users()
+returns table (
+  id           uuid,
+  email        text,
+  trainer_id   text,
+  city         text,
+  district     text,
+  phone        text,
+  created_at   timestamptz,
+  is_admin     boolean,
+  posts_count  bigint
+)
+language plpgsql security definer stable
+set search_path = public, auth
+as $$
+begin
+  if not is_admin(auth.uid()) then
+    raise exception 'unauthorized: admin only';
+  end if;
+  return query
+  select
+    p.id,
+    u.email::text,
+    p.trainer_id,
+    p.city,
+    p.district,
+    p.phone,
+    p.created_at,
+    exists(select 1 from admins a where a.user_id = p.id) as is_admin,
+    (select count(*) from posts where user_id = p.id) as posts_count
+  from profiles p
+  left join auth.users u on u.id = p.id
+  order by p.created_at desc;
+end;
+$$;
+revoke all on function admin_list_users() from public;
+grant execute on function admin_list_users() to authenticated;
+
+-- 관리자 권한 부여
+create or replace function admin_grant(target_uid uuid)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if not is_admin(auth.uid()) then
+    raise exception 'unauthorized: admin only';
+  end if;
+  insert into admins (user_id) values (target_uid)
+  on conflict (user_id) do nothing;
+end;
+$$;
+revoke all on function admin_grant(uuid) from public;
+grant execute on function admin_grant(uuid) to authenticated;
+
+-- 관리자 권한 해제 (본인은 해제 불가 — last admin lockout 방지)
+create or replace function admin_revoke(target_uid uuid)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+begin
+  if not is_admin(auth.uid()) then
+    raise exception 'unauthorized: admin only';
+  end if;
+  if target_uid = auth.uid() then
+    raise exception '본인은 관리자에서 해제할 수 없습니다';
+  end if;
+  delete from admins where user_id = target_uid;
+end;
+$$;
+revoke all on function admin_revoke(uuid) from public;
+grant execute on function admin_revoke(uuid) to authenticated;
+
+-- 대시보드 통계
+create or replace function admin_stats()
+returns table (
+  users_count    bigint,
+  shops_count    bigint,
+  posts_count    bigint,
+  comments_count bigint,
+  notices_count  bigint,
+  inquiries_open bigint
+)
+language plpgsql security definer stable
+set search_path = public
+as $$
+begin
+  if not is_admin(auth.uid()) then
+    raise exception 'unauthorized: admin only';
+  end if;
+  return query select
+    (select count(*) from profiles),
+    (select count(*) from shops),
+    (select count(*) from posts),
+    (select count(*) from comments),
+    (select count(*) from notices),
+    (select count(*) from inquiries where status = 'open');
+end;
+$$;
+revoke all on function admin_stats() from public;
+grant execute on function admin_stats() to authenticated;
+
 -- ─── 관리자 등록 (수동) ───────────────────────────────────
 -- 본인을 관리자로 등록하려면 아래 주석 해제 후 trainer_id 변경:
 -- insert into admins (user_id) select id from profiles where trainer_id = '내아이디';

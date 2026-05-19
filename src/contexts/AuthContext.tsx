@@ -27,16 +27,31 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 async function fetchProfile(session: Session): Promise<TrainerUser> {
-  const [profileRes, adminRes] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('trainer_id, phone, city, district, notif_news, notif_comment, marketing_opt_in')
-      .eq('id', session.user.id)
-      .maybeSingle(),
-    supabase.rpc('is_admin', { uid: session.user.id }),
-  ])
-  const profile = profileRes.data
-  const isAdmin = adminRes.error ? false : !!adminRes.data
+  // 프로필은 핵심 — 실패하면 user 자체가 null 됨 (호출자가 catch).
+  const { data: profile, error: profileErr } = await supabase
+    .from('profiles')
+    .select('trainer_id, phone, city, district, notif_news, notif_comment, marketing_opt_in')
+    .eq('id', session.user.id)
+    .maybeSingle()
+  if (profileErr) {
+    // not-found 는 maybeSingle 이 data=null 로 처리하므로 여기 도달하는 건 네트워크/스키마 문제
+    console.warn('[Auth] profile fetch error', profileErr)
+  }
+
+  // is_admin RPC 는 별도 try — 실패해도 isAdmin=false 로 폴백, 로그인 자체는 유지
+  let isAdmin = false
+  try {
+    const { data: adminData, error: adminErr } = await supabase.rpc('is_admin', {
+      uid: session.user.id,
+    })
+    if (adminErr) {
+      console.warn('[Auth] is_admin RPC error', adminErr)
+    } else {
+      isAdmin = !!adminData
+    }
+  } catch (e) {
+    console.warn('[Auth] is_admin RPC threw', e)
+  }
 
   return {
     id: session.user.id,
