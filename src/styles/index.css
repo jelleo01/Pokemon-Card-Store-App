@@ -6,10 +6,13 @@
 
 @layer base {
   html,
-  body {
+  body,
+  #root {
     font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
     background-color: var(--paper);
     color: var(--ink);
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
   }
 
   * {
