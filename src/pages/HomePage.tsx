@@ -137,7 +137,7 @@ function SignedInHome() {
       {/* Top banner: HOME 중앙 + 우측 프로필 */}
       <div
         style={{
-          padding: '14px 16px 10px',
+          padding: 'calc(14px + env(safe-area-inset-top, 0px)) 16px 10px',
           borderBottom: '2px solid #111',
           background: 'var(--paper-2)',
           flexShrink: 0,

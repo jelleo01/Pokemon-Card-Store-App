@@ -22,6 +22,12 @@ import { supabase } from '@/lib/supabase'
 
 // 서울 시청 근처를 디폴트로 (강남역보다 살짝 북쪽 — 수도권 매장 분포 중앙)
 const DEFAULT_CENTER: LatLng = { lat: 37.5547, lng: 126.9707 }
+
+// Kakao Maps only covers Korea — reject GPS coordinates outside Korean bounds
+// (prevents iOS Simulator's default Cupertino location from blanking the map)
+function isKorea({ lat, lng }: LatLng) {
+  return lat >= 33.0 && lat <= 38.9 && lng >= 124.5 && lng <= 132.0
+}
 // level 6 = 구 단위로 한 화면. 1=가장 줌인, 14=가장 줌아웃
 const DEFAULT_LEVEL = 6
 
@@ -43,7 +49,7 @@ export default function MapPage() {
   // mount 시 자동으로 현재 위치 시도. 실패 시 DEFAULT_CENTER 유지.
   useEffect(() => {
     getCurrentPosition()
-      .then((pos) => setMe(pos))
+      .then((pos) => { if (isKorea(pos)) setMe(pos) })
       .catch(() => {
         // 권한 거부/타임아웃 — 무시. 사용자가 "내 위치" 버튼으로 다시 시도 가능
       })
@@ -101,6 +107,7 @@ export default function MapPage() {
     setLocating(true)
     try {
       const pos = await getCurrentPosition()
+      if (!isKorea(pos)) return
       setMe(pos)
       mapRef.current?.panTo(pos)
     } catch (err) {
@@ -164,7 +171,7 @@ export default function MapPage() {
       {/* Header */}
       <div
         style={{
-          padding: '12px 14px 8px',
+          padding: 'calc(12px + env(safe-area-inset-top, 0px)) 14px 8px',
           borderBottom: '2px solid #111',
           background: 'var(--paper-2)',
           flexShrink: 0,
@@ -590,7 +597,7 @@ export default function MapPage() {
         >
           <div
             style={{
-              padding: '12px 14px',
+              padding: 'calc(12px + env(safe-area-inset-top, 0px)) 14px 12px',
               borderBottom: '2px solid #111',
               background: 'var(--paper-2)',
             }}

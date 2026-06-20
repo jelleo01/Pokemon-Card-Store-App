@@ -30,10 +30,16 @@ export default function LoginPage() {
   async function handleGoogle() {
     setErr(null)
     setBusy(true)
+    // 5초 후에도 앱이 여기 있으면 redirect 실패 — 시뮬레이터/브라우저에서 흔함
+    const t = setTimeout(() => {
+      setBusy(false)
+      setErr('로그인 창이 열리지 않았어요. 실기기에서 다시 시도해주세요.')
+    }, 5000)
     try {
       await signInWithGoogle()
-      // OAuth는 redirect 방식이라 여기서 더 할 게 없음
+      clearTimeout(t)
     } catch (e) {
+      clearTimeout(t)
       setBusy(false)
       setErr(e instanceof Error ? e.message : '로그인 실패')
     }
@@ -42,7 +48,10 @@ export default function LoginPage() {
   return (
     <div
       style={{
-        height: '100vh',
+        height: '100dvh',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
         background: 'var(--paper)',
@@ -85,7 +94,7 @@ export default function LoginPage() {
       >
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
           <PixelBorder color="#111" bg="var(--red)" padding={0} style={{ width: 110 }}>
-            <div style={{ padding: '14px 8px', textAlign: 'center', color: '#FAFAF7' }}>
+            <div style={{ padding: '14px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#FAFAF7' }}>
               <Sprite kind="ball" size={36} dark />
               <div
                 style={{

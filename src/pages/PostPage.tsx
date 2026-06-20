@@ -143,6 +143,12 @@ export default function PostPage() {
     setTapCandidates(places.slice(0, 6))
   }
 
+  // Force relayout after page settles — minimap in scrollable container needs this on iOS
+  useEffect(() => {
+    const tid = setTimeout(() => newMapRef.current?.relayout(), 600)
+    return () => clearTimeout(tid)
+  }, [])
+
   const open = SHOPS.find((s) => s.id === shopId) ?? SHOPS[0]
   const stockTags = ['신상 박스 입고', '잔여 적음', '품절', '재입고 예정', '싱글 카드']
 
@@ -285,7 +291,7 @@ export default function PostPage() {
       {/* Header */}
       <div
         style={{
-          padding: '14px 16px 12px',
+          padding: 'calc(14px + env(safe-area-inset-top, 0px)) 16px 12px',
           borderBottom: '2px solid #111',
           background: 'var(--paper-2)',
           flexShrink: 0,
@@ -358,6 +364,10 @@ export default function PostPage() {
                 height: 160,
                 overflow: 'hidden',
                 background: '#EEECE2',
+                // Force GPU compositing so the canvas renders correctly
+                // inside overflow:auto on iOS WKWebView
+                transform: 'translateZ(0)',
+                WebkitTransform: 'translateZ(0)',
               }}
             >
               <KakaoMap

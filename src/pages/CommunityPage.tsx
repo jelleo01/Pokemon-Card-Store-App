@@ -180,7 +180,7 @@ export default function CommunityPage() {
       {/* Header */}
       <div
         style={{
-          padding: '14px 16px 8px',
+          padding: 'calc(14px + env(safe-area-inset-top, 0px)) 16px 8px',
           borderBottom: '2px solid #111',
           background: 'var(--paper-2)',
           flexShrink: 0,

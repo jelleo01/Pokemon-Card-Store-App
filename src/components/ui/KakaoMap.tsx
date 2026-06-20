@@ -7,6 +7,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
   type CSSProperties,
 } from 'react'
 import type { Shop } from '@/lib/data'
@@ -69,32 +70,40 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
   const shopOverlaysRef = useRef<kakao.maps.CustomOverlay[]>([])
   const meOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null)
   const newOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null)
+  const [mapErr, setMapErr] = useState<string | null>(null)
 
   // Init map once
   useEffect(() => {
     let cancelled = false
+    let initTid: ReturnType<typeof setTimeout>
+
     loadKakao()
       .then(() => {
-        if (cancelled || !containerRef.current) return
-        const map = new kakao.maps.Map(containerRef.current, {
-          center: new kakao.maps.LatLng(center.lat, center.lng),
-          level,
-        })
-        // 명시적으로 켜고 끔 — 카카오 SDK가 default true 라도 다른 곳에서
-        // 의도치 않게 끄는 경우가 있어서 매번 호출.
-        map.setDraggable(interactive)
-        map.setZoomable(interactive)
-        mapRef.current = map
-        // Some browsers paint the canvas before our container has its final
-        // size; relayout once after the next frame to avoid blank tiles.
-        requestAnimationFrame(() => map.relayout())
+        if (cancelled) return
+        // Defer to a new task (not just a microtask) so iOS WKWebView finishes
+        // CSS layout — especially important when the map is inside overflow:auto.
+        initTid = setTimeout(() => {
+          if (cancelled || !containerRef.current) return
+          const el = containerRef.current
+          const map = new kakao.maps.Map(el, {
+            center: new kakao.maps.LatLng(center.lat, center.lng),
+            level,
+          })
+          map.setDraggable(interactive)
+          map.setZoomable(interactive)
+          mapRef.current = map
+          // Single early relayout so Kakao re-measures the container.
+          // Must fire before GPS can return (~500ms+) to avoid tile flicker.
+          requestAnimationFrame(() => { if (mapRef.current) map.relayout() })
+        }, 0)
       })
       .catch((err) => {
-        // eslint-disable-next-line no-console
         console.error('[KakaoMap]', err)
+        if (!cancelled) setMapErr(String(err?.message || '카카오 지도를 불러오지 못했어요.\n카카오 개발자 콘솔 → 앱 → 플랫폼 → Web에 http://localhost 를 등록해주세요.'))
       })
     return () => {
       cancelled = true
+      clearTimeout(initTid)
       shopOverlaysRef.current.forEach((o) => o.setMap(null))
       shopOverlaysRef.current = []
       meOverlayRef.current?.setMap(null)
@@ -247,6 +256,14 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
     if (!shop) return
     const id = shop.getAttribute('data-shop-id')
     if (id) onPinClick(id)
+  }
+
+  if (mapErr) {
+    return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#EEECE2', ...style }}>
+        <div style={{ textAlign: 'center', padding: 16, fontSize: 11, color: '#555', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{mapErr}</div>
+      </div>
+    )
   }
 
   return (

@@ -24,7 +24,7 @@ export default function GBTabBar({ active }: GBTabBarProps) {
       style={{
         display: 'flex',
         gap: 0,
-        padding: '8px 10px 14px',
+        padding: '8px 10px calc(14px + env(safe-area-inset-bottom, 0px))',
         borderTop: '2px solid #111',
         background: 'var(--paper)',
         flexShrink: 0,

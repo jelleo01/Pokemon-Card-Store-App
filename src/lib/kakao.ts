@@ -22,6 +22,14 @@ export function loadKakao(): Promise<void> {
   if (loadPromise) return loadPromise
 
   loadPromise = new Promise<void>((resolve, reject) => {
+    // Fail fast if the injected script element fires an error (e.g. ATS block, bad key)
+    const script = document.getElementById('kakao-maps-sdk') as HTMLScriptElement | null
+    if (script) {
+      script.addEventListener('error', () => {
+        reject(new Error('Kakao Maps SDK script failed to load. Check network, ATS settings, and VITE_KAKAO_MAP_KEY.'))
+      }, { once: true })
+    }
+
     const tryLoad = (attempt = 0) => {
       const k = (window as unknown as { kakao?: typeof kakao }).kakao
       if (k && k.maps && typeof k.maps.load === 'function') {
@@ -29,7 +37,7 @@ export function loadKakao(): Promise<void> {
         return
       }
       if (attempt > 100) {
-        reject(new Error('Kakao Maps SDK did not load. Check VITE_KAKAO_MAP_KEY and that localhost is registered in Kakao developer console.'))
+        reject(new Error('Kakao Maps SDK did not load. Check VITE_KAKAO_MAP_KEY and that http://localhost is registered as a web platform in the Kakao developer console.'))
         return
       }
       setTimeout(() => tryLoad(attempt + 1), 50)

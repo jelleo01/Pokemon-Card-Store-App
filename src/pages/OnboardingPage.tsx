@@ -111,7 +111,7 @@ export default function OnboardingPage() {
     >
       <div
         style={{
-          padding: '12px 14px 8px',
+          padding: 'calc(12px + env(safe-area-inset-top, 0px)) 14px 8px',
           borderBottom: '2px solid #111',
           background: 'var(--paper-2)',
           flexShrink: 0,

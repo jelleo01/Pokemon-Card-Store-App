@@ -16,7 +16,7 @@ if (KAKAO_KEY && !document.getElementById('kakao-maps-sdk')) {
   const script = document.createElement('script')
   script.id = 'kakao-maps-sdk'
   script.async = true
-  script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services,clusterer`
+  script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services,clusterer`
   document.head.appendChild(script)
 }
 
