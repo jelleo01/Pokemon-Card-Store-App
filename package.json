@@ -11,6 +11,8 @@
     "crawl-shops": "node --env-file=.env.local scripts/crawl-shops.mjs"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/browser": "^8.0.3",
     "@capacitor/core": "^8.3.4",
     "@capacitor/ios": "^8.3.4",
     "@supabase/supabase-js": "^2.49.4",

@@ -53,6 +53,17 @@
 	<string>근처 포켓몬 카드샵을 찾기 위해 위치 정보를 사용합니다.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>근처 포켓몬 카드샵을 찾기 위해 위치 정보를 사용합니다.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.jelleo01.pokemonmap</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.jelleo01.pokemonmap</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoadsInWebContent</key>

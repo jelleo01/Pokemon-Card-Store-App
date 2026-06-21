@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { Capacitor } from '@capacitor/core'
+import { Browser } from '@capacitor/browser'
+import { App } from '@capacitor/app'
 
 export interface TrainerUser {
   id: string                   // auth.users.id (uuid)
@@ -100,21 +103,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       if (!mounted) return
       loadSession(s)
+      // OAuth 콜백으로 세션이 생기면 인앱 브라우저 닫기
+      if (s) Browser.close().catch(() => {})
     })
+
+    // iOS 딥링크 콜백 처리 (com.jelleo01.pokemonmap://login-callback#...)
+    let appUrlSub: { remove: () => void } | null = null
+    if (Capacitor.isNativePlatform()) {
+      App.addListener('appUrlOpen', async ({ url }) => {
+        if (!url.startsWith('com.jelleo01.pokemonmap://')) return
+        const hashPart = url.split('#')[1] ?? ''
+        const params = new URLSearchParams(hashPart)
+        const accessToken = params.get('access_token')
+        const refreshToken = params.get('refresh_token')
+        if (accessToken && refreshToken) {
+          await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        }
+      }).then(l => { appUrlSub = l })
+    }
+
     return () => {
       mounted = false
       sub.subscription.unsubscribe()
+      appUrlSub?.remove()
     }
   }, [loadSession])
 
   async function signInWithGoogle() {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin + '/',
-      },
-    })
-    if (error) throw error
+    if (Capacitor.isNativePlatform()) {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'com.jelleo01.pokemonmap://login-callback',
+          skipBrowserRedirect: true,
+        },
+      })
+      if (error) throw error
+      if (data.url) await Browser.open({ url: data.url })
+    } else {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin + '/',
+        },
+      })
+      if (error) throw error
+    }
   }
 
   async function signOut() {
