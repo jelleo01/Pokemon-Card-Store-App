@@ -28,6 +28,18 @@ export default function HomePage() {
   return <SignedInHome />
 }
 
+const ScreenBorder = () => (
+  <div
+    style={{
+      position: 'fixed',
+      inset: 0,
+      border: '3px solid #111',
+      pointerEvents: 'none',
+      zIndex: 9999,
+    }}
+  />
+)
+
 function Landing() {
   const navigate = useNavigate()
   return (
@@ -45,6 +57,7 @@ function Landing() {
         color: 'var(--ink)',
       }}
     >
+      <ScreenBorder />
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
         <Sprite kind="ball" size={64} />
         <div
@@ -134,6 +147,7 @@ function SignedInHome() {
         color: 'var(--ink)',
       }}
     >
+      <ScreenBorder />
       {/* Top banner: HOME 중앙 + 우측 프로필 */}
       <div
         style={{
