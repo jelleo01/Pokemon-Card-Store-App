@@ -221,6 +221,66 @@ function SignedInHome() {
           </div>
         </div>
 
+        {/* 트레이너 카드 */}
+        <PixelBorder color="#111" bg="var(--paper-2)" padding={14} style={{ margin: '10px 0' }}>
+          <div
+            style={{
+              fontSize: 9,
+              letterSpacing: 2,
+              fontFamily: gbStyles.fontEn,
+              fontWeight: 700,
+              opacity: 0.5,
+              marginBottom: 8,
+            }}
+          >
+            TRAINER CARD
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <PixelBorder color="#111" bg="var(--red)" padding={0} style={{ flexShrink: 0 }}>
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Sprite kind="person" size={28} dark />
+              </div>
+            </PixelBorder>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  fontFamily: gbStyles.fontEn,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {user?.trainerId ?? '???'}
+              </div>
+              <div style={{ fontSize: 10, opacity: 0.6, marginTop: 3 }}>
+                {[user?.city, user?.district].filter(Boolean).join(' ') || '지역 미설정'}
+              </div>
+            </div>
+            <div
+              style={{
+                fontSize: 9,
+                fontFamily: gbStyles.fontEn,
+                opacity: 0.4,
+                letterSpacing: 1,
+                flexShrink: 0,
+              }}
+            >
+              No.001
+            </div>
+          </div>
+        </PixelBorder>
+
         {/* 메인 버튼 3개 — 세로 중앙 */}
         <div
           style={{

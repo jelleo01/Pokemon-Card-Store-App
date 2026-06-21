@@ -49,9 +49,6 @@ export default function LoginPage() {
     <div
       style={{
         height: '100dvh',
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-        boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
         background: 'var(--paper)',
@@ -61,7 +58,7 @@ export default function LoginPage() {
     >
       <div
         style={{
-          padding: '12px 14px 8px',
+          padding: 'calc(12px + env(safe-area-inset-top)) 14px 8px',
           borderBottom: '2px solid #111',
           background: 'var(--paper-2)',
           flexShrink: 0,
@@ -86,6 +83,7 @@ export default function LoginPage() {
         style={{
           flex: 1,
           padding: 16,
+          paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
           display: 'flex',
           flexDirection: 'column',
           gap: 14,
