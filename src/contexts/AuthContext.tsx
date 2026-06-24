@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { Capacitor } from '@capacitor/core'
 import { Browser } from '@capacitor/browser'
 import { App } from '@capacitor/app'
+import { SignInWithApple } from '@capacitor-community/apple-sign-in'
 
 export interface TrainerUser {
   id: string                   // auth.users.id (uuid)
@@ -23,6 +24,7 @@ interface AuthContextValue {
   session: Session | null
   loading: boolean
   signInWithGoogle: () => Promise<void>
+  signInWithApple: () => Promise<void>
   signOut: () => Promise<void>
   refresh: () => Promise<void>
 }
@@ -151,6 +153,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function signInWithApple() {
+    if (Capacitor.isNativePlatform()) {
+      const { response } = await SignInWithApple.authorize({
+        clientId: 'com.jelleo01.pokemonmap',
+        redirectURI: 'com.jelleo01.pokemonmap://login-callback',
+        scopes: 'email name',
+      })
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: response.identityToken,
+      })
+      if (error) throw error
+    } else {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: { redirectTo: window.location.origin + '/' },
+      })
+      if (error) throw error
+    }
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
     setUser(null)
@@ -165,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, session, loading, signInWithGoogle, signOut, refresh }}
+      value={{ user, session, loading, signInWithGoogle, signInWithApple, signOut, refresh }}
     >
       {children}
     </AuthContext.Provider>

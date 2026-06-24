@@ -9,7 +9,7 @@ import { gbStyles } from '@/lib/gbStyles'
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const { user, loading, signInWithGoogle } = useAuth()
+  const { user, loading, signInWithGoogle, signInWithApple } = useAuth()
   const [params] = useSearchParams()
   const redirect = params.get('redirect') || '/'
 
@@ -30,7 +30,6 @@ export default function LoginPage() {
   async function handleGoogle() {
     setErr(null)
     setBusy(true)
-    // 5초 후에도 앱이 여기 있으면 redirect 실패 — 시뮬레이터/브라우저에서 흔함
     const t = setTimeout(() => {
       setBusy(false)
       setErr('로그인 창이 열리지 않았어요. 실기기에서 다시 시도해주세요.')
@@ -42,6 +41,17 @@ export default function LoginPage() {
       clearTimeout(t)
       setBusy(false)
       setErr(e instanceof Error ? e.message : '로그인 실패')
+    }
+  }
+
+  async function handleApple() {
+    setErr(null)
+    setBusy(true)
+    try {
+      await signInWithApple()
+    } catch (e) {
+      setBusy(false)
+      setErr(e instanceof Error ? e.message : 'Apple 로그인 실패')
     }
   }
 
@@ -138,6 +148,27 @@ export default function LoginPage() {
             </span>
           </PixelButton>
 
+          <PixelButton
+            full
+            color="#111"
+            bg="#111"
+            fg="#FAFAF7"
+            onClick={handleApple}
+            disabled={busy}
+          >
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                justifyContent: 'center',
+              }}
+            >
+              <AppleLogo />
+              <span>{busy ? '이동 중...' : 'Apple로 시작하기'}</span>
+            </span>
+          </PixelButton>
+
           {err && (
             <div
               style={{
@@ -165,6 +196,14 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function AppleLogo() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 814 1000" aria-hidden fill="#FAFAF7">
+      <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-37.3-152.8-106.1C74.7 688.9 44.3 597.3 44.3 509.2c0-145.1 94.7-221.9 182.7-221.9 48.2 0 88.4 31.8 119 31.8 29.2 0 75.1-33.4 130.6-33.4 20.4 0 71.4 2 108.8 43.8zm-62-130.5c-28.7 33.2-75.4 57.8-122.5 57.8-4.1 0-8.3-.4-12.5-.9 1.5-48.3 34.8-97.1 67.4-127.6 35.3-33.2 95.7-58.6 144-60.3 1.7 50.6-19.6 100.1-76.4 131z" />
+    </svg>
   )
 }
 
