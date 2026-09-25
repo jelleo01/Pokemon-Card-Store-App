@@ -25,7 +25,7 @@ export default function AppFeedbackAdmin() {
     {data?.length === 0 && <p>등록된 후기가 없어요.</p>}
     {data?.slice(0, 20).map(row => <PixelBorder key={row.user_id} padding={14}>
       <b>{'★'.repeat(row.rating)} ({row.rating}/5) · {row.headline}</b>
-      <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', margin: '12px 0', lineHeight: 1.8 }}>{row.feedback}</p>
+      {row.feedback !== row.headline && <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', margin: '12px 0', lineHeight: 1.8 }}>{row.feedback}</p>}
       <time style={{ fontSize: 12, opacity: .6 }}>{new Date(row.created_at).toLocaleString('ko-KR')}</time>
     </PixelBorder>)}
     <div style={{ display: 'flex', gap: 12 }}><PixelButton disabled={page === 0} onClick={() => setPage(p => p - 1)}>이전</PixelButton><PixelButton disabled={!data || data.length <= 20} onClick={() => setPage(p => p + 1)}>다음</PixelButton></div>

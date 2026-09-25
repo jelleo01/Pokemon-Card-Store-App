@@ -1,3 +1,4 @@
+import FeedbackPage from '@/pages/FeedbackPage'
 import PointsPage from '@/pages/PointsPage'
 import PointsHistoryPage from '@/pages/PointsHistoryPage'
 import PointNotifications from '@/components/ui/PointNotifications'
@@ -31,6 +32,7 @@ export default function App() {
       <Route path="/auth-wall" element={<AuthWallPage />} />
       <Route path="/policy" element={<PolicyPage />} />
       <Route element={<RequireAuth />}>
+        <Route path="/feedback" element={<FeedbackPage />} />
         <Route path="/points" element={<PointsPage />} />
         <Route path="/points/history" element={<PointsHistoryPage />} />
         <Route path="/notices" element={<NoticesPage />} />

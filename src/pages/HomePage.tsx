@@ -1,6 +1,4 @@
-import AppFeedback from '@/components/ui/AppFeedback'
 import PointsBadge from '@/components/ui/PointsBadge'
-import ShareButton from '@/components/ui/ShareButton'
 import { pendingRedirect } from '@/lib/authRedirect'
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
@@ -123,6 +121,17 @@ function SignedInHome() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [latestNotice, setLatestNotice] = useState<{ title: string } | null>(null)
+  useEffect(() => {
+    const bodyOverflow = document.body.style.overflow
+    const rootOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = bodyOverflow
+      document.documentElement.style.overflow = rootOverflow
+    }
+  }, [])
+
 
   useEffect(() => {
     let alive = true
@@ -137,260 +146,43 @@ function SignedInHome() {
         if (!alive) return
         if (data) setLatestNotice(data as { title: string })
       })
-    return () => {
-      alive = false
-    }
+    return () => { alive = false }
   }, [])
 
   return (
-    <div
-      style={{
-        height: '100dvh',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--paper)',
-        fontFamily: gbStyles.font,
-        color: 'var(--ink)',
-      }}
-    >
-      {/* Top banner */}
-      <div
-        style={{
-          padding: 'calc(14px + env(safe-area-inset-top, 0px)) 16px 10px',
-          borderBottom: '2px solid #111',
-          background: 'var(--paper-2)',
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{ flex: 1 }} />
-          <div
-            style={{
-              fontSize: 16,
-              fontWeight: 700,
-              letterSpacing: 4,
-              fontFamily: gbStyles.fontEn,
-              color: 'var(--ink)',
-            }}
-          >
-            HOME
-          </div>
-          <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              onClick={() => navigate('/profile')}
-              title="프로필"
-              style={{
-                width: 28,
-                height: 28,
-                padding: 0,
-                cursor: 'pointer',
-                background: 'var(--paper)',
-                border: '2px solid #111',
-                boxShadow: '2px 2px 0 0 #111',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Sprite kind="person" size={16} />
-            </button>
-          </div>
+    <div className="home-screen" style={{ fontFamily: gbStyles.font }}>
+      <header className="home-header">
+        <b>HOME</b>
+        <button aria-label="프로필" onClick={() => navigate('/profile')}><Sprite kind="person" size={18} /></button>
+      </header>
+      <main className="home-content">
+        <div className="home-hero">
+          <span className="home-ball"><Sprite kind="ball" size={32} /></span>
+          <b>POKEMON CARDS</b>
+          <small>내 주변 포켓몬 카드 판매점 찾기</small>
         </div>
-      </div>
-
-      <div
-        className="home-content"
-        style={{
-          flex: 1,
-          minHeight: 0,
-          padding: 14,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'auto',
-        }}
-      >
-        {/* POKEMON CARDS 타이틀 */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 0 4px',
-          }}
-        >
-          <Sprite kind="ball" size={36} />
-          <div
-            style={{
-              fontSize: 20,
-              fontWeight: 700,
-              letterSpacing: 3,
-              fontFamily: gbStyles.fontEn,
-              textAlign: 'center',
-              lineHeight: 1.2,
-            }}
-          >
-            POKEMON CARDS
-          </div>
-          <div
-            style={{
-              fontSize: 10,
-              opacity: 0.6,
-              letterSpacing: 1,
-            }}
-          >
-            ※ {user?.trainerId} · 카드 판매점 찾기
-          </div>
-        </div>
-
-        {/* 트레이너 카드 */}
-        <PixelBorder color="#111" bg="var(--paper-2)" padding={14} style={{ margin: '10px 0' }}>
-          <div
-            style={{
-              fontSize: 9,
-              letterSpacing: 2,
-              fontFamily: gbStyles.fontEn,
-              fontWeight: 700,
-              opacity: 0.5,
-              marginBottom: 8,
-            }}
-          >
-            TRAINER CARD
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <PixelBorder color="#111" bg="var(--red)" padding={0} style={{ flexShrink: 0 }}>
-              <div
-                style={{
-                  width: 48,
-                  height: 48,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Sprite kind="person" size={28} dark />
-              </div>
-            </PixelBorder>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  letterSpacing: 1,
-                  fontFamily: gbStyles.fontEn,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {user?.trainerId ?? '???'}
-              </div>
-              <div style={{ fontSize: 10, opacity: 0.6, marginTop: 3 }}>
-                {[user?.city, user?.district].filter(Boolean).join(' ') || '지역 미설정'}
-              </div>
-            </div>
-            <div
-              style={{
-                fontSize: 9,
-                fontFamily: gbStyles.fontEn,
-                fontWeight: 700,
-                letterSpacing: 1,
-                flexShrink: 0,
-              }}
-            >
-              <PointsBadge />
-            </div>
+        <PixelBorder padding={10} bg="var(--paper-2)" style={{ flexShrink: 0 }}>
+          <div className="home-trainer">
+            <span className="home-avatar"><Sprite kind="person" size={30} /></span>
+            <div className="home-trainer-name"><small>TRAINER</small><b>{user?.trainerId ?? '???'}</b><small>{[user?.city, user?.district].filter(Boolean).join(' ') || '지역 미설정'}</small></div>
+            <PointsBadge />
           </div>
         </PixelBorder>
-
-        <div style={{ padding: '8px 0 16px' }}><ShareButton /></div>
-
-        <AppFeedback />
-
-        {/* 메인 버튼 3개 — 세로 중앙 */}
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            gap: 10,
-            padding: '20px 0',
-          }}
-        >
-          <PixelButton
-            full
-            color="#111"
-            bg="var(--red)"
-            fg="#FAFAF7"
-            onClick={() => navigate('/map')}
-          >
-            <span
-              style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}
-            >
-              <Sprite kind="map" size={18} dark /> <span>로그인하고 지도 찾기</span>
-            </span>
-          </PixelButton>
-          <PixelButton full color="#111" bg="var(--paper)" onClick={() => navigate('/post')}>
-            <span
-              style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}
-            >
-              <Sprite kind="card" size={18} /> <span>글 쓰기 / POST</span>
-            </span>
-          </PixelButton>
-          <PixelButton full color="#111" bg="var(--paper)" onClick={() => navigate('/community')}>
-            <span
-              style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}
-            >
-              <Sprite kind="mega" size={18} /> <span>커뮤니티 / COMMUNITY</span>
-            </span>
-          </PixelButton>
+        <div className="home-actions">
+          <div className="home-primary">
+            <PixelButton full bg="var(--red)" fg="#FAFAF7" onClick={() => navigate('/map')}>지도 찾기 / MAP</PixelButton>
+            <PixelButton full onClick={() => navigate('/post')}>글 쓰기 / POST</PixelButton>
+            <PixelButton full onClick={() => navigate('/community')}>커뮤니티 / COMMUNITY</PixelButton>
+          </div>
+          <div className="home-secondary">
+            <PixelButton full onClick={() => navigate('/feedback')}>앱 사용 후기 남기기 (+15P)</PixelButton>
+            <PixelButton full onClick={() => navigate('/inquiry')}>문의하기</PixelButton>
+          </div>
         </div>
-
-        {/* 공지사항 — 클릭하면 /notices */}
-        <button
-          onClick={() => navigate('/notices')}
-          style={{
-            padding: 0,
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            textAlign: 'left',
-            opacity: latestNotice ? 1 : 0.45,
-          }}
-        >
-          <PixelBorder color="#111" bg="var(--paper-2)" padding={10}>
-            <div
-              style={{
-                fontSize: 10,
-                letterSpacing: 2,
-                fontFamily: gbStyles.fontEn,
-                fontWeight: 700,
-                marginBottom: 4,
-                display: 'flex',
-                alignItems: 'center',
-              }}
-            >
-              <span>★ 공지사항 / NOTICE</span>
-              <span style={{ flex: 1 }} />
-              <span style={{ fontSize: 9, opacity: 0.6 }}>▶</span>
-            </div>
-            <div
-              style={{
-                fontSize: 11,
-                color: 'var(--ink-2)',
-                lineHeight: 1.5,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {latestNotice?.title ?? '현재 등록된 공지사항이 없어요.'}
-            </div>
-          </PixelBorder>
+        <button className="home-notice" onClick={() => navigate('/notices')}>
+          <b>공지사항</b><span>{latestNotice?.title ?? '현재 등록된 공지사항이 없어요.'}</span><span>▶</span>
         </button>
-      </div>
-
+      </main>
       <GBTabBar active="home" />
     </div>
   )

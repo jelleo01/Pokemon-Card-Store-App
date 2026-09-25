@@ -37,8 +37,8 @@ It applies to new activity; old activity is not retroactively credited.
 - Existing place purchases receive a seven-day window measured from their
   original purchase time. Old detail RPC access is revoked; expiry is enforced
   in the database. Duplicate request IDs never cause a second charge.
-- In-app feedback: rating 1–5, one-line summary (2–100 characters), and detailed
-  feedback (5–2,000 characters). First submission earns 15 P, regardless of rating.
+- In-app feedback: rating 1–5 and one combined `한줄평(피드백)` input (5–100 characters).
+  The existing RPC receives the same text in its summary and details fields, so no new database migration is required. First submission earns 15 P, regardless of rating.
   Account uniqueness and transaction locking prevent duplicate submissions/rewards.
   Feedback is private to its author and administrators; admins can read it in
   the new '앱 후기' tab. This does not reward App Store reviews.
@@ -59,7 +59,7 @@ Balances appear in the home trainer area and the upper-right of the profile's
 red trainer card. `/points` explains rules; `/points/history` paginates ledger
 entries. Signup explains the welcome gift and point rules. A global notification
 shows earned/spent points on signup, reports, comments, likes, purchases and feedback.
-Home hosts app sharing and the feedback form; place sharing stays on place screens.
+Home has compact feedback and inquiry buttons below Community and fits within the viewport. The feedback button opens `/feedback`; app sharing is removed from Home. Place sharing stays on place screens.
 
 Basic map metadata and individual community posts remain available to signed-in
 users so they can discover places and earn points. Paid detail access is not a

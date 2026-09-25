@@ -239,10 +239,10 @@ export default function ProfilePage() {
       >
         {/* Trainer card */}
         <PixelBorder color="#111" bg="var(--red)" padding={0} style={{ position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 10, right: 10 }}><PointsBadge /></div>
+          <div style={{ position: 'absolute', top: 8, right: 10, zIndex: 1 }}><PointsBadge compact /></div>
           <div
             style={{
-              padding: '52px 16px 16px',
+              padding: '14px 16px',
               color: '#FAFAF7',
               display: 'flex',
               alignItems: 'center',
@@ -274,10 +274,10 @@ export default function ProfilePage() {
               >
                 TRAINER
               </div>
-              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2, paddingRight: 76, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {user?.trainerId || '?????'}
               </div>
-              <div style={{ fontSize: 10, marginTop: 4, opacity: 0.85 }}>
+              <div style={{ fontSize: 10, marginTop: 4, opacity: 0.85, overflowWrap: 'anywhere' }}>
                 {user?.email || ''}
               </div>
               {user?.isAdmin && (
