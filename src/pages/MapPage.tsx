@@ -1,4 +1,4 @@
-import PointsBadge from '@/components/ui/PointsBadge'
+import { usePlaceSummaries } from '@/hooks/usePlaceSummaries'
 import ShareButton from '@/components/ui/ShareButton'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Browser } from '@capacitor/browser'
@@ -21,7 +21,6 @@ import {
   type KakaoPlace,
   type LatLng,
 } from '@/lib/kakao'
-import { supabase } from '@/lib/supabase'
 
 // 서울 시청 근처를 디폴트로 (강남역보다 살짝 북쪽 — 수도권 매장 분포 중앙)
 const DEFAULT_CENTER: LatLng = { lat: 37.5547, lng: 126.9707 }
@@ -46,9 +45,24 @@ export default function MapPage() {
   const [visibleCount, setVisibleCount] = useState(30)
   const [placeResults, setPlaceResults] = useState<KakaoPlace[]>([])
   const [locating, setLocating] = useState(false)
-  const [newsCount, setNewsCount] = useState<Record<string, number>>({})
+  const { data: summaries, isError: countError } = usePlaceSummaries()
+  const countLabel = (id: string) => countError ? '확인 실패' : !summaries ? '확인 중…' : `${summaries[id]?.news_count ?? 0}건`
   const [navTarget, setNavTarget] = useState<{ id: string; name: string; lat: number; lng: number } | null>(null)
   const mapRef = useRef<KakaoMapHandle>(null)
+
+  useEffect(() => {
+    const bodyOverflow = document.body.style.overflow
+    const rootOverflow = document.documentElement.style.overflow
+    const overscroll = document.documentElement.style.overscrollBehavior
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+    document.documentElement.style.overscrollBehavior = 'none'
+    return () => {
+      document.body.style.overflow = bodyOverflow
+      document.documentElement.style.overflow = rootOverflow
+      document.documentElement.style.overscrollBehavior = overscroll
+    }
+  }, [])
 
   // mount 시 자동으로 현재 위치 시도. 실패 시 DEFAULT_CENTER 유지.
   useEffect(() => {
@@ -57,35 +71,6 @@ export default function MapPage() {
       .catch(() => {
         // 권한 거부/타임아웃 — 무시. 사용자가 "내 위치" 버튼으로 다시 시도 가능
       })
-  }, [])
-
-  // 매장별 글 수 fetch (마운트 시 1회). client SHOPS.id 와 매핑.
-  useEffect(() => {
-    let alive = true
-    supabase
-      .from('posts')
-      .select('shops(name, lat, lng)')
-      .then(({ data, error }) => {
-        if (!alive) return
-        if (error) {
-          console.error('[news count fetch]', error)
-          return
-        }
-        const counts: Record<string, number> = {}
-        type Row = { shops: { name: string; lat: number; lng: number } | null }
-        for (const row of (data as unknown as Row[]) ?? []) {
-          const sh = row.shops
-          if (!sh) continue
-          const matched = SHOPS.find(
-            (s) => s.name === sh.name && s.lat === sh.lat && s.lng === sh.lng,
-          )
-          if (matched) counts[matched.id] = (counts[matched.id] ?? 0) + 1
-        }
-        setNewsCount(counts)
-      })
-    return () => {
-      alive = false
-    }
   }, [])
 
   // me 가 처음 set되면 지도도 자동으로 그쪽으로 이동
@@ -185,8 +170,11 @@ export default function MapPage() {
   return (
     <div
       style={{
-        position: 'relative',
-        height: '100vh',
+        position: 'fixed',
+        inset: 0,
+        height: '100dvh',
+        overflow: 'hidden',
+        overscrollBehavior: 'none',
         display: 'flex',
         flexDirection: 'column',
         background: 'var(--paper)',
@@ -254,7 +242,7 @@ export default function MapPage() {
       <div
         style={{
           position: 'relative',
-          height: 320,
+          height: 'clamp(160px, 34dvh, 320px)',
           borderBottom: '2px solid #111',
           overflow: 'hidden',
           background: '#EEECE2',
@@ -420,6 +408,7 @@ export default function MapPage() {
         )}
       </div>
 
+      <section aria-label="매장 목록" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
       {/* 선택된 매장 DETAIL — 지도/필터 바로 아래 고정. 핀이나 리스트 행 클릭 시 표시 */}
       {open && (
         <div
@@ -478,12 +467,12 @@ export default function MapPage() {
               ✕
             </button>
           </div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}><PointsBadge /><ShareButton placeId={open.id} title={open.name} /></div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}><ShareButton placeId={open.id} title={open.name} /></div>
           <Row k="위치" v={open.addr} />
           <Row k="거리" v={`${open.dist}km`} />
           <Row k="분류" v={open.type} />
           <Row k="재고" v="—" />
-          <Row k="소식" v={`${newsCount[open.id] ?? 0}건`} />
+          <Row k="소식" v={countLabel(open.id)} />
           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
             <PixelButton
               sm
@@ -514,7 +503,7 @@ export default function MapPage() {
               onClick={() => navigate(`/shop/${open.id}`)}
               style={{ fontFamily: gbStyles.fontReadable, fontSize: 12 }}
             >
-              상세 −5 P ▶
+              {summaries?.[open.id]?.expires_at && new Date(summaries[open.id].expires_at!).getTime() > Date.now() ? '상세 (열람 중) ▶' : '상세 7일 · 5 P ▶'}
             </PixelButton>
           </div>
         </div>
@@ -523,8 +512,6 @@ export default function MapPage() {
       {/* Shop list */}
       <div
         style={{
-          flex: 1,
-          overflowY: 'auto',
           padding: '8px 10px',
           display: 'flex',
           flexDirection: 'column',
@@ -579,7 +566,7 @@ export default function MapPage() {
                           fontFamily: gbStyles.fontEn,
                         }}
                       >
-                        {s.dist}km · {s.type}
+                        {s.dist}km · {s.type} · 소식 {countLabel(s.id)}
                       </div>
                     </div>
                     <span style={{ fontSize: 10, opacity: 0.6 }}>{isOpen ? '▼' : '▶'}</span>
@@ -618,6 +605,7 @@ export default function MapPage() {
         )}
       </div>
 
+      </section>
       <GBTabBar active="map" />
 
       {/* 지도 앱 연결 모달 */}

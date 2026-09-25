@@ -1,5 +1,4 @@
-import PointsPanel from '@/components/ui/PointsPanel'
-import ShareButton from '@/components/ui/ShareButton'
+import PointsBadge from '@/components/ui/PointsBadge'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PixelBorder from '@/components/ui/PixelBorder'
@@ -238,13 +237,12 @@ export default function ProfilePage() {
           minHeight: 0,
         }}
       >
-        <PointsPanel />
-        <ShareButton />
         {/* Trainer card */}
-        <PixelBorder color="#111" bg="var(--red)" padding={0}>
+        <PixelBorder color="#111" bg="var(--red)" padding={0} style={{ position: 'relative' }}>
+          <div style={{ position: 'absolute', top: 10, right: 10 }}><PointsBadge /></div>
           <div
             style={{
-              padding: '14px 16px',
+              padding: '52px 16px 16px',
               color: '#FAFAF7',
               display: 'flex',
               alignItems: 'center',
@@ -304,6 +302,10 @@ export default function ProfilePage() {
           </div>
         </PixelBorder>
 
+        <div style={{ display: 'flex', gap: 12 }}>
+          <PixelButton full onClick={() => navigate('/points')}>포인트 안내</PixelButton>
+          <PixelButton full onClick={() => navigate('/points/history')}>포인트 기록</PixelButton>
+        </div>
         {/* Account */}
         <PixelBorder color="#111" bg="var(--paper-2)" padding={10}>
           <div

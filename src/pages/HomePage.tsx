@@ -1,3 +1,6 @@
+import AppFeedback from '@/components/ui/AppFeedback'
+import PointsBadge from '@/components/ui/PointsBadge'
+import ShareButton from '@/components/ui/ShareButton'
 import { pendingRedirect } from '@/lib/authRedirect'
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
@@ -23,7 +26,7 @@ export default function HomePage() {
     return (
       <div
         style={{
-          height: '100vh',
+          height: '100dvh',
           background: 'var(--paper)',
         }}
       />
@@ -142,7 +145,7 @@ function SignedInHome() {
   return (
     <div
       style={{
-        height: '100vh',
+        height: '100dvh',
         display: 'flex',
         flexDirection: 'column',
         background: 'var(--paper)',
@@ -196,8 +199,10 @@ function SignedInHome() {
       </div>
 
       <div
+        className="home-content"
         style={{
           flex: 1,
+          minHeight: 0,
           padding: 14,
           display: 'flex',
           flexDirection: 'column',
@@ -288,15 +293,19 @@ function SignedInHome() {
               style={{
                 fontSize: 9,
                 fontFamily: gbStyles.fontEn,
-                opacity: 0.4,
+                fontWeight: 700,
                 letterSpacing: 1,
                 flexShrink: 0,
               }}
             >
-              No.001
+              <PointsBadge />
             </div>
           </div>
         </PixelBorder>
+
+        <div style={{ padding: '8px 0 16px' }}><ShareButton /></div>
+
+        <AppFeedback />
 
         {/* 메인 버튼 3개 — 세로 중앙 */}
         <div

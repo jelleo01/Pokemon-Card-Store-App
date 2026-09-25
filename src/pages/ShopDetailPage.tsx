@@ -1,3 +1,4 @@
+import { usePlaceSummaries } from '@/hooks/usePlaceSummaries'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import PixelBorder from '@/components/ui/PixelBorder'
@@ -12,12 +13,13 @@ import { supabase } from '@/lib/supabase'
 import { usePoints } from '@/hooks/usePoints'
 
 interface PlaceDetails {
+  expires_at: string
   place: { name: string; addr: string; type: string; hours: string | null }
   posts: { id: string; body: string; category: 'news' | 'ask'; who: string; created_at: string; hearts_count: number; comments_count: number }[]
 }
 
-// A new route visit gets a new request ID; refresh/retry within this screen
-// reuses it. StrictMode and repeated clicks cannot create a second charge.
+// Each screen uses an idempotent request ID. The server reuses a valid
+// seven-day unlock across screens and devices.
 export default function ShopDetailPage() {
   const { id = '' } = useParams()
   return <PlaceVisit key={id} id={id} />
@@ -25,7 +27,10 @@ export default function ShopDetailPage() {
 
 function PlaceVisit({ id }: { id: string }) {
   const navigate = useNavigate()
-  const { balance, error: pointsError, refreshPoints } = usePoints()
+  const { balance, error: pointsError, notifyTransaction } = usePoints()
+  const { data: summaries, isError: summaryError, refetch: retrySummary } = usePlaceSummaries()
+  const summary = summaries?.[id]
+  const unlocked = !!summary?.expires_at && new Date(summary.expires_at).getTime() > Date.now()
   const preview = SHOPS.find(s => s.id === id)
   const requestId = useRef(crypto.randomUUID())
   const inFlight = useRef(false)
@@ -49,14 +54,18 @@ function PlaceVisit({ id }: { id: string }) {
         const { error } = await supabase.rpc('card_open_place', { place_key: id, request_id: requestId.current })
         if (error) throw error
         if (alive.current) setPaid(true)
-        void refreshPoints()
+        await notifyTransaction(`visit:${requestId.current}`, '장소 정보 7일 열람')
       }
       const { data, error } = await supabase.rpc('card_place_details', { visit_id: requestId.current })
       if (error) throw error
       if (alive.current) setDetails(data as PlaceDetails)
     } catch (e) {
       const message = typeof e === 'object' && e !== null && 'message' in e ? String(e.message) : ''
-      if (alive.current) setError(message.includes('INSUFFICIENT_POINTS') ? '포인트가 부족해요. 소식이나 댓글을 남겨 포인트를 모아보세요.'
+      if (message.includes('PLACE_ACCESS_EXPIRED')) {
+        requestId.current = crypto.randomUUID()
+        if (alive.current) { setPaid(false); setAttempted(false); setDetails(null) }
+      }
+      if (alive.current) setError(message.includes('PLACE_ACCESS_EXPIRED') ? '열람 기간이 끝났어요. 5 P를 사용하면 다시 7일 동안 볼 수 있어요.' : message.includes('INSUFFICIENT_POINTS') ? '포인트가 부족해요. 소식이나 댓글을 남겨 포인트를 모아보세요.'
         : message.includes('PLACE_NOT_FOUND') ? '매장을 찾을 수 없어요. 포인트는 차감되지 않았어요.'
         : '정보를 불러오지 못했어요. 다시 시도해 주세요. 같은 화면에서 재시도해도 중복 차감되지 않아요.')
     } finally {
@@ -76,11 +85,14 @@ function PlaceVisit({ id }: { id: string }) {
         <ShareButton placeId={id} title={details?.place.name ?? preview?.name} />
         {!details && <PixelBorder padding={18}>
           <h2 style={{ fontSize: 18 }}>{paid ? '정보 불러오기' : '장소 상세 정보 열기'}</h2>
-          <p style={{ fontSize: 13, lineHeight: 1.8 }}>{paid ? '이 방문의 5 P 결제가 완료되었어요. 추가 차감 없이 다시 시도할 수 있어요.' : '이 장소의 정보와 최신 소식을 확인해 보세요. 열 때 5 P가 사용되며, 나갔다가 다시 방문하면 5 P가 필요해요.'}</p>
-          <p style={{ fontSize: 12 }}>가입 +10 P · 카드 있음 / 없음 등 소식 +3 P · 다른 사람의 소식에 댓글·첫 좋아요 +1 P</p>
+          <p style={{ fontSize: 13, lineHeight: 1.8 }}>{paid ? '추가 차감 없이 다시 불러올 수 있어요.' : unlocked ? `이미 열람 중이에요. ${new Date(summary!.expires_at!).toLocaleString('ko-KR')}까지 무료로 볼 수 있어요.` : '5 P를 사용하면 이 장소의 정보와 최신 소식을 1주일(7일) 동안 자유롭게 볼 수 있어요.'}</p>
+          <p style={{ marginTop: 16, fontWeight: 700 }}>카드 소식 {summaryError ? '확인 실패' : !summaries ? '확인 중…' : `${summary?.news_count ?? 0}건`}</p>
+          {summaries && !summary?.news_count && <p style={{ fontSize: 13, marginTop: 8 }}>아직 등록된 카드 소식이 없어요. 결제 전 확인해 주세요.</p>}
+          <div style={{ margin: '20px 0 28px' }}><PixelButton sm onClick={() => navigate('/points')}>포인트 규칙 보기 ↗</PixelButton></div>
+          {summaryError && <div style={{ marginBottom: 20 }}><PixelButton onClick={() => void retrySummary()}>소식 수 다시 확인</PixelButton></div>}
           {pointsError && <p role="alert">포인트를 불러오지 못했어요. 위 포인트 버튼으로 다시 시도해 주세요.</p>}
-          <PixelButton full disabled={busy || (!paid && !attempted && (balance === undefined || balance < 5))} onClick={openDetails}>
-            {busy ? '불러오는 중…' : paid ? '다시 불러오기 (추가 차감 없음)' : attempted ? '같은 요청 다시 시도 (총 5 P)' : balance !== undefined && balance < 5 ? '포인트 부족' : '5 P 사용하고 열기'}
+          <PixelButton full disabled={busy || (!paid && !unlocked && (!summaries || summaryError)) || (!paid && !unlocked && !attempted && (balance === undefined || balance < 5))} onClick={openDetails}>
+            {busy ? '불러오는 중…' : paid ? '다시 불러오기 (추가 차감 없음)' : unlocked ? '열람하기 (추가 차감 없음)' : attempted ? '같은 요청 다시 시도 (총 5 P)' : balance !== undefined && balance < 5 ? '포인트 부족' : '5 P 사용하고 7일 열람'}
           </PixelButton>
           <div style={{ marginTop: 16 }}><PixelButton full onClick={() => navigate(`/post?shopId=${encodeURIComponent(id)}`)}>소식 남기고 +3 P</PixelButton></div>
         </PixelBorder>}
@@ -88,6 +100,7 @@ function PlaceVisit({ id }: { id: string }) {
         {details && <>
           <PixelBorder padding={14}>
             <b>{details.place.name}</b>
+            <p style={{ fontSize: 12, marginTop: 12 }}>{new Date(details.expires_at).toLocaleString('ko-KR')}까지 열람 가능</p>
             <p>{details.place.type} · {details.place.addr}</p>
             {details.place.hours && <p>영업시간: {details.place.hours}</p>}
             <PixelButton sm disabled={busy} onClick={openDetails}>↻ 새로고침 (무료)</PixelButton>

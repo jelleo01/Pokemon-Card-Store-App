@@ -1,3 +1,4 @@
+import { announcePoints } from '@/lib/pointNotices'
 import { usePoints } from '@/hooks/usePoints'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -48,7 +49,7 @@ function timeAgo(iso: string): string {
 }
 
 export default function PostDetailPage() {
-  const { refreshPoints } = usePoints()
+  const { refreshPoints, notifyTransaction } = usePoints()
   const [liking, setLiking] = useState(false)
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -211,31 +212,17 @@ export default function PostDetailPage() {
   async function toggleHeart() {
     if (!id || !user || liking) return
     setLiking(true)
-    if (hearted) {
-      setHeart(false)
-      setHearts((h) => Math.max(0, h - 1))
-      const { error } = await supabase
-        .from('hearts')
-        .delete()
-        .eq('post_id', id)
-        .eq('user_id', user.id)
-      if (error) {
-        setHeart(true)
-        setHearts((h) => h + 1)
-      }
-    } else {
-      setHeart(true)
-      setHearts((h) => h + 1)
-      const { error } = await supabase
-        .from('hearts')
-        .insert({ post_id: id, user_id: user.id })
-      if (error) {
-        setHeart(false)
-        setHearts((h) => Math.max(0, h - 1))
-      }
-    }
-    setLiking(false)
-    void refreshPoints()
+    try {
+      const { data, error } = await supabase.rpc('card_set_like', { target_post: id, liked: !hearted })
+      if (error) throw error
+      setHeart(data.liked)
+      setHearts(data.hearts)
+      if (data.awarded > 0) announcePoints(data.awarded, '좋아요', `${user.id}:like:${id}`)
+      else if (data.liked) showToast(post?.userId === user.id ? '내 글의 좋아요는 적립되지 않아요.' : '좋아요를 남겼어요. 이전에 적립한 글은 중복 적립되지 않아요.')
+      void refreshPoints()
+    } catch {
+      showToast('좋아요를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.')
+    } finally { setLiking(false) }
   }
 
   function showToast(msg: string) {
@@ -318,7 +305,7 @@ export default function PostDetailPage() {
     ])
     setDraft('')
     void refreshPoints()
-    if (post?.userId !== user.id && post?.category === 'news') showToast('댓글 등록 완료! +1 P')
+    void notifyTransaction(`comment:${inserted.id}`, '댓글 작성')
   }
 
   if (loading) {
@@ -699,7 +686,7 @@ export default function PostDetailPage() {
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={user ? '다른 사람의 소식에 댓글 +1 P' : '로그인이 필요해요'}
+          placeholder={user ? '다른 사람의 글에 댓글 +1 P' : '로그인이 필요해요'}
           disabled={!user}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {

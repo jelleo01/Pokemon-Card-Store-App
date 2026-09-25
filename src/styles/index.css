@@ -22,3 +22,7 @@
     box-sizing: border-box;
   }
 }
+
+.home-content > * {
+  flex-shrink: 0;
+}
