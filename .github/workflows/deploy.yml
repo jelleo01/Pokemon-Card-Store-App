@@ -32,6 +32,8 @@ jobs:
       - name: Build
         run: npm run build
         env:
+          VITE_BASE_PATH: /Pokemon-Card-Store-App/
+          VITE_PUBLIC_APP_URL: https://jelleo01.github.io/Pokemon-Card-Store-App/
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_KAKAO_MAP_KEY: ${{ secrets.VITE_KAKAO_MAP_KEY }}

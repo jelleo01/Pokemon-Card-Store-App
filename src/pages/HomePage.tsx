@@ -1,5 +1,6 @@
+import { pendingRedirect } from '@/lib/authRedirect'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import GBTabBar from '@/components/ui/GBTabBar'
 import PixelBorder from '@/components/ui/PixelBorder'
@@ -10,6 +11,12 @@ import { gbStyles } from '@/lib/gbStyles'
 
 export default function HomePage() {
   const { user, loading } = useAuth()
+  const [params] = useSearchParams()
+  const sharedPlace = params.get('place')
+  const [savedRedirect] = useState(pendingRedirect)
+  useEffect(() => {
+    if (user && savedRedirect !== '/') sessionStorage.removeItem('loginRedirect')
+  }, [user, savedRedirect])
 
   // 세션/프로필 로딩 중엔 빈 화면 — Landing 이 flash 되는 걸 방지
   if (loading) {
@@ -23,22 +30,19 @@ export default function HomePage() {
     )
   }
 
+  if (sharedPlace) return <Navigate to={`/shop/${encodeURIComponent(sharedPlace)}`} replace />
+
   if (!user) return <Landing />
+
+  if (savedRedirect !== '/') {
+    return <Navigate to={savedRedirect} replace />
+  }
+
+  if (!user.trainerId) return <Navigate to="/onboarding" replace />
 
   return <SignedInHome />
 }
 
-const ScreenBorder = () => (
-  <div
-    style={{
-      position: 'fixed',
-      inset: 0,
-      border: '3px solid #111',
-      pointerEvents: 'none',
-      zIndex: 9999,
-    }}
-  />
-)
 
 function Landing() {
   const navigate = useNavigate()
@@ -57,7 +61,6 @@ function Landing() {
         color: 'var(--ink)',
       }}
     >
-      <ScreenBorder />
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
         <Sprite kind="ball" size={64} />
         <div
@@ -98,7 +101,7 @@ function Landing() {
           <span
             style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}
           >
-            <Sprite kind="map" size={18} dark /> <span>지도 찾기 / FIND ON MAP</span>
+            <Sprite kind="map" size={18} dark /> <span>로그인하고 지도 찾기</span>
           </span>
         </PixelButton>
         <PixelButton full color="#111" bg="var(--paper)" onClick={() => navigate('/login')}>
@@ -147,49 +150,49 @@ function SignedInHome() {
         color: 'var(--ink)',
       }}
     >
-      <ScreenBorder />
-      {/* Top banner: HOME 중앙 + 우측 프로필 */}
+      {/* Top banner */}
       <div
         style={{
           padding: 'calc(14px + env(safe-area-inset-top, 0px)) 16px 10px',
           borderBottom: '2px solid #111',
           background: 'var(--paper-2)',
           flexShrink: 0,
-          position: 'relative',
         }}
       >
-        <div
-          style={{
-            fontSize: 16,
-            fontWeight: 700,
-            letterSpacing: 4,
-            fontFamily: gbStyles.fontEn,
-            textAlign: 'center',
-          }}
-        >
-          HOME
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div style={{ flex: 1 }} />
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              letterSpacing: 4,
+              fontFamily: gbStyles.fontEn,
+              color: 'var(--ink)',
+            }}
+          >
+            HOME
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => navigate('/profile')}
+              title="프로필"
+              style={{
+                width: 28,
+                height: 28,
+                padding: 0,
+                cursor: 'pointer',
+                background: 'var(--paper)',
+                border: '2px solid #111',
+                boxShadow: '2px 2px 0 0 #111',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Sprite kind="person" size={16} />
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => navigate('/profile')}
-          title="프로필"
-          style={{
-            position: 'absolute',
-            right: 14,
-            top: 10,
-            width: 30,
-            height: 30,
-            padding: 0,
-            cursor: 'pointer',
-            background: 'var(--paper)',
-            border: '2px solid #111',
-            boxShadow: '2px 2px 0 0 #111',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Sprite kind="person" size={18} />
-        </button>
       </div>
 
       <div
@@ -316,7 +319,7 @@ function SignedInHome() {
             <span
               style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}
             >
-              <Sprite kind="map" size={18} dark /> <span>지도 찾기 / FIND ON MAP</span>
+              <Sprite kind="map" size={18} dark /> <span>로그인하고 지도 찾기</span>
             </span>
           </PixelButton>
           <PixelButton full color="#111" bg="var(--paper)" onClick={() => navigate('/post')}>

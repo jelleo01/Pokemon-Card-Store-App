@@ -1,4 +1,7 @@
+import PointsBadge from '@/components/ui/PointsBadge'
+import ShareButton from '@/components/ui/ShareButton'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Browser } from '@capacitor/browser'
 import { useNavigate } from 'react-router-dom'
 import GBTabBar from '@/components/ui/GBTabBar'
 import PixelBorder from '@/components/ui/PixelBorder'
@@ -44,6 +47,7 @@ export default function MapPage() {
   const [placeResults, setPlaceResults] = useState<KakaoPlace[]>([])
   const [locating, setLocating] = useState(false)
   const [newsCount, setNewsCount] = useState<Record<string, number>>({})
+  const [navTarget, setNavTarget] = useState<{ id: string; name: string; lat: number; lng: number } | null>(null)
   const mapRef = useRef<KakaoMapHandle>(null)
 
   // mount 시 자동으로 현재 위치 시도. 실패 시 DEFAULT_CENTER 유지.
@@ -139,12 +143,34 @@ export default function MapPage() {
   const sorted = [...visible].sort((a, b) => a.dist - b.dist)
 
   // 핀 또는 리스트/검색 결과 선택 시 — 카카오 지도를 그 매장으로 이동
+  // 이미 선택된 장소를 다시 누르면 지도 앱 연결 모달 표시
   const selectShop = (id: string | null) => {
+    if (id && id === openId) {
+      const s = withDist.find((x) => x.id === id)
+      if (s) setNavTarget({ id: s.id, name: s.name, lat: s.lat, lng: s.lng })
+      return
+    }
     setOpenId(id)
     if (id) {
       const s = withDist.find((x) => x.id === id)
       if (s) mapRef.current?.panTo({ lat: s.lat, lng: s.lng })
     }
+  }
+
+  async function openNavApp(type: 'apple' | 'google' | 'kakao') {
+    if (!navTarget) return
+    const { lat, lng, name } = navTarget
+    setNavTarget(null)
+    if (type === 'apple') {
+      // maps:// scheme → iOS 기본 지도 앱 (시뮬레이터에서는 동작 안 할 수 있음)
+      window.open(`maps://?daddr=${lat},${lng}`, '_system')
+      return
+    }
+    const url =
+      type === 'google'
+        ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+        : `https://map.kakao.com/link/to/${encodeURIComponent(name)},${lat},${lng}`
+    await Browser.open({ url })
   }
 
   const toggleType = (t: ShopType) =>
@@ -228,7 +254,7 @@ export default function MapPage() {
       <div
         style={{
           position: 'relative',
-          height: 240,
+          height: 320,
           borderBottom: '2px solid #111',
           overflow: 'hidden',
           background: '#EEECE2',
@@ -452,6 +478,7 @@ export default function MapPage() {
               ✕
             </button>
           </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}><PointsBadge /><ShareButton placeId={open.id} title={open.name} /></div>
           <Row k="위치" v={open.addr} />
           <Row k="거리" v={`${open.dist}km`} />
           <Row k="분류" v={open.type} />
@@ -466,7 +493,17 @@ export default function MapPage() {
               onClick={() => navigate(`/post?shopId=${open.id}`)}
               style={{ fontFamily: gbStyles.fontReadable, fontSize: 12 }}
             >
-              ✎ 수정하기
+              ✎ 소식 +3 P
+            </PixelButton>
+            <PixelButton
+              sm
+              full
+              color="#111"
+              bg="var(--paper)"
+              onClick={() => setNavTarget({ id: open.id, name: open.name, lat: open.lat, lng: open.lng })}
+              style={{ fontFamily: gbStyles.fontReadable, fontSize: 12 }}
+            >
+              길 안내
             </PixelButton>
             <PixelButton
               sm
@@ -477,7 +514,7 @@ export default function MapPage() {
               onClick={() => navigate(`/shop/${open.id}`)}
               style={{ fontFamily: gbStyles.fontReadable, fontSize: 12 }}
             >
-              더 자세히 ▶
+              상세 −5 P ▶
             </PixelButton>
           </div>
         </div>
@@ -582,6 +619,95 @@ export default function MapPage() {
       </div>
 
       <GBTabBar active="map" />
+
+      {/* 지도 앱 연결 모달 */}
+      {navTarget && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            zIndex: 60,
+            display: 'flex',
+            alignItems: 'flex-end',
+          }}
+          onClick={() => setNavTarget(null)}
+        >
+          <div
+            style={{
+              width: '100%',
+              background: 'var(--paper)',
+              borderTop: '3px solid #111',
+              padding: `16px 16px calc(16px + env(safe-area-inset-bottom, 0px))`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                letterSpacing: 2,
+                fontFamily: gbStyles.fontEn,
+                fontWeight: 700,
+                opacity: 0.6,
+                marginBottom: 4,
+              }}
+            >
+              길 안내 / NAVIGATE
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                fontFamily: gbStyles.fontReadable,
+                marginBottom: 14,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {navTarget.name}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <PixelButton
+                full
+                color="#111"
+                bg="var(--paper)"
+                onClick={() => openNavApp('apple')}
+                style={{ fontFamily: gbStyles.fontReadable, fontSize: 13 }}
+              >
+                Apple Maps로 열기
+              </PixelButton>
+              <PixelButton
+                full
+                color="#111"
+                bg="var(--paper)"
+                onClick={() => openNavApp('google')}
+                style={{ fontFamily: gbStyles.fontReadable, fontSize: 13 }}
+              >
+                Google Maps로 열기
+              </PixelButton>
+              <PixelButton
+                full
+                color="#111"
+                bg="var(--paper)"
+                onClick={() => openNavApp('kakao')}
+                style={{ fontFamily: gbStyles.fontReadable, fontSize: 13 }}
+              >
+                Kakao Maps로 열기
+              </PixelButton>
+              <PixelButton
+                full
+                color="#111"
+                bg="var(--paper-2)"
+                onClick={() => setNavTarget(null)}
+                style={{ fontFamily: gbStyles.fontReadable, fontSize: 12, marginTop: 2 }}
+              >
+                취소
+              </PixelButton>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SEARCH overlay */}
       {searchOpen && (
@@ -766,7 +892,7 @@ export default function MapPage() {
                               background: 'var(--paper)',
                             }}
                           >
-                            📍
+                            ▲
                           </span>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 12, fontWeight: 700 }}>{p.name}</div>

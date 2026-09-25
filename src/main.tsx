@@ -22,7 +22,7 @@ if (KAKAO_KEY && !document.getElementById('kakao-maps-sdk')) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <App />

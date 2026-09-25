@@ -2,6 +2,18 @@ import type { Post } from '@/lib/data'
 import PixelBorder from './PixelBorder'
 import { gbStyles } from '@/lib/gbStyles'
 
+function fmtMins(n: number): string {
+  if (n < 1) return '방금'
+  if (n < 60) return `${n}분 전`
+  const h = Math.round(n / 60)
+  if (h < 24) return `${h}시간 전`
+  const d = Math.round(n / 1440)
+  if (d < 30) return `${d}일 전`
+  const mo = Math.round(n / (30 * 1440))
+  if (mo < 12) return `${mo}달 전`
+  return `${Math.round(n / (365 * 1440))}년 전`
+}
+
 interface PostCardProps {
   p: Post
   compact?: boolean
@@ -58,7 +70,7 @@ export default function PostCard({ p, compact, onClick }: PostCardProps) {
                 fontFamily: gbStyles.fontReadable,
               }}
             >
-              {p.mins}m
+              {fmtMins(p.mins)}
             </span>
           </div>
           <div

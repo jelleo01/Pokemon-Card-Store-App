@@ -28,6 +28,7 @@ interface AdminUser {
   phone: string | null
   created_at: string
   is_admin: boolean
+  banned: boolean
   posts_count: number
 }
 
@@ -83,6 +84,24 @@ interface Inquiry {
 interface MetaRow {
   key: string
   value: string
+}
+
+interface ReportRow {
+  id: string
+  target_type: 'post' | 'comment'
+  target_id: string
+  reason: string | null
+  status: 'pending' | 'accepted' | 'dismissed'
+  created_at: string
+  reviewed_at: string | null
+  reporter: { trainer_id: string } | null
+  author: { trainer_id: string } | null
+}
+
+interface BlockedEntry {
+  blocked_id: string
+  created_at: string
+  blocked: { trainer_id: string } | null
 }
 
 export default function AdminPage() {
@@ -505,9 +524,10 @@ function NoticesAdmin() {
 }
 
 // ────────────────────────────────────────────────────────────
-// 문의 관리
+// 문의 + 신고 관리 (서브탭)
 // ────────────────────────────────────────────────────────────
 function InquiriesAdmin() {
+  const [subTab, setSubTab] = useState<'reports' | 'inquiries'>('reports')
   const [list, setList] = useState<Inquiry[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -527,18 +547,15 @@ function InquiriesAdmin() {
   }, [])
 
   useEffect(() => {
-    load()
-  }, [load])
+    if (subTab === 'inquiries') load()
+  }, [load, subTab])
 
   async function resolve(id: string) {
     const { error } = await supabase
       .from('inquiries')
       .update({ status: 'resolved', resolved_at: new Date().toISOString() })
       .eq('id', id)
-    if (error) {
-      alert(error.message)
-      return
-    }
+    if (error) { alert(error.message); return }
     await load()
   }
 
@@ -547,93 +564,203 @@ function InquiriesAdmin() {
       .from('inquiries')
       .update({ status: 'open', resolved_at: null })
       .eq('id', id)
-    if (error) {
-      alert(error.message)
-      return
-    }
+    if (error) { alert(error.message); return }
     await load()
   }
 
-  if (loading) return <div style={loadingStyle}>불러오는 중...</div>
-  if (list.length === 0) return <div style={loadingStyle}>문의가 없어요.</div>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* 서브탭 */}
+      <div style={{ display: 'flex', border: '2px solid #111' }}>
+        {(['reports', 'inquiries'] as const).map((t, i) => {
+          const on = subTab === t
+          return (
+            <button
+              key={t}
+              onClick={() => setSubTab(t)}
+              style={{
+                flex: 1,
+                padding: '7px 0',
+                border: 'none',
+                borderRight: i === 0 ? '2px solid #111' : 'none',
+                background: on ? '#111' : 'transparent',
+                color: on ? '#FAFAF7' : '#111',
+                fontFamily: gbStyles.font,
+                fontSize: 11,
+                cursor: 'pointer',
+                fontWeight: on ? 700 : 400,
+              }}
+            >
+              {t === 'reports' ? '신고' : '문의'}
+            </button>
+          )
+        })}
+      </div>
+
+      {subTab === 'reports' ? (
+        <ReportsAdmin />
+      ) : loading ? (
+        <div style={loadingStyle}>불러오는 중...</div>
+      ) : list.length === 0 ? (
+        <div style={loadingStyle}>문의가 없어요.</div>
+      ) : (
+        list.map((q) => (
+          <PixelBorder
+            key={q.id}
+            color="#111"
+            bg={q.status === 'open' ? 'var(--paper)' : 'var(--paper-2)'}
+            padding={10}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <span
+                style={{
+                  fontSize: 9, padding: '1px 5px', border: '2px solid #111',
+                  background: q.status === 'open' ? 'var(--red)' : 'transparent',
+                  color: q.status === 'open' ? '#FAFAF7' : '#111',
+                  letterSpacing: 1, fontWeight: 700,
+                }}
+              >
+                {q.status === 'open' ? '미해결' : '해결됨'}
+              </span>
+              <div style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{q.subject}</div>
+              <div style={{ fontSize: 9, opacity: 0.5, fontFamily: gbStyles.fontEn }}>
+                {new Date(q.created_at).toLocaleDateString()}
+              </div>
+            </div>
+            <div style={{ fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap', marginTop: 4, color: 'var(--ink-2)' }}>
+              {q.body}
+            </div>
+            {q.contact && (
+              <div style={{ fontSize: 10, marginTop: 6, fontFamily: gbStyles.fontEn, opacity: 0.7 }}>
+                ▶ 회신: {q.contact}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              {q.status === 'open' ? (
+                <PixelButton sm color="#111" bg="var(--red)" fg="#FAFAF7" onClick={() => resolve(q.id)}>
+                  ✓ 해결됨 표시
+                </PixelButton>
+              ) : (
+                <PixelButton sm color="#111" bg="var(--paper)" onClick={() => reopen(q.id)}>
+                  ↻ 다시 열기
+                </PixelButton>
+              )}
+            </div>
+          </PixelBorder>
+        ))
+      )}
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────
+// 신고 목록 (InquiriesAdmin 서브탭)
+// ────────────────────────────────────────────────────────────
+function ReportsAdmin() {
+  const [list, setList] = useState<ReportRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState<'pending' | 'accepted' | 'dismissed' | 'all'>('pending')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const q = supabase
+      .from('reports')
+      .select('id, target_type, target_id, reason, status, created_at, reviewed_at, reporter:reporter_id(trainer_id), author:author_id(trainer_id)')
+      .order('created_at', { ascending: false })
+    const { data, error } = statusFilter === 'all' ? await q : await q.eq('status', statusFilter)
+    setLoading(false)
+    if (error) { console.error('[admin reports]', error); return }
+    setList((data ?? []) as unknown as ReportRow[])
+  }, [statusFilter])
+
+  useEffect(() => { load() }, [load])
+
+  async function updateStatus(id: string, status: 'accepted' | 'dismissed') {
+    const { error } = await supabase
+      .from('reports')
+      .update({ status, reviewed_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) { alert(error.message); return }
+    await load()
+  }
+
+  const STATUS_LABELS = { pending: '미검토', accepted: '수락됨', dismissed: '기각됨', all: '전체' } as const
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {list.map((q) => (
-        <PixelBorder
-          key={q.id}
-          color="#111"
-          bg={q.status === 'open' ? 'var(--paper)' : 'var(--paper-2)'}
-          padding={10}
-        >
-          <div
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {(['pending', 'accepted', 'dismissed', 'all'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setStatusFilter(s)}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              marginBottom: 4,
+              fontSize: 10, padding: '3px 8px', border: '2px solid #111',
+              background: statusFilter === s ? '#111' : 'var(--paper)',
+              color: statusFilter === s ? '#FAFAF7' : '#111',
+              cursor: 'pointer', fontFamily: gbStyles.font, fontWeight: 700,
             }}
           >
-            <span
-              style={{
-                fontSize: 9,
-                padding: '1px 5px',
-                border: '2px solid #111',
-                background: q.status === 'open' ? 'var(--red)' : 'transparent',
-                color: q.status === 'open' ? '#FAFAF7' : '#111',
-                letterSpacing: 1,
-                fontWeight: 700,
-              }}
-            >
-              {q.status === 'open' ? '미해결' : '해결됨'}
-            </span>
-            <div style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{q.subject}</div>
-            <div style={{ fontSize: 9, opacity: 0.5, fontFamily: gbStyles.fontEn }}>
-              {new Date(q.created_at).toLocaleDateString()}
-            </div>
-          </div>
-          <div
-            style={{
-              fontSize: 11,
-              lineHeight: 1.5,
-              whiteSpace: 'pre-wrap',
-              marginTop: 4,
-              color: 'var(--ink-2)',
-            }}
+            {STATUS_LABELS[s]}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={loadingStyle}>불러오는 중...</div>
+      ) : list.length === 0 ? (
+        <div style={loadingStyle}>해당 신고가 없어요.</div>
+      ) : (
+        list.map((r) => (
+          <PixelBorder
+            key={r.id}
+            color="#111"
+            bg={r.status === 'pending' ? 'var(--paper)' : 'var(--paper-2)'}
+            padding={10}
           >
-            {q.body}
-          </div>
-          {q.contact && (
-            <div
-              style={{
-                fontSize: 10,
-                marginTop: 6,
-                fontFamily: gbStyles.fontEn,
-                opacity: 0.7,
-              }}
-            >
-              ▶ 회신: {q.contact}
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-            {q.status === 'open' ? (
-              <PixelButton
-                sm
-                color="#111"
-                bg="var(--red)"
-                fg="#FAFAF7"
-                onClick={() => resolve(q.id)}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <span
+                style={{
+                  fontSize: 9, padding: '1px 5px', border: '2px solid #111',
+                  background: r.status === 'pending' ? 'var(--red)' : 'transparent',
+                  color: r.status === 'pending' ? '#FAFAF7' : '#111',
+                  fontWeight: 700, letterSpacing: 1,
+                }}
               >
-                ✓ 해결됨 표시
-              </PixelButton>
-            ) : (
-              <PixelButton sm color="#111" bg="var(--paper)" onClick={() => reopen(q.id)}>
-                ↻ 다시 열기
-              </PixelButton>
+                {STATUS_LABELS[r.status]}
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, fontFamily: gbStyles.fontReadable }}>
+                {r.target_type === 'post' ? '게시글' : '댓글'} 신고
+              </span>
+              <div style={{ flex: 1 }} />
+              <span style={{ fontSize: 9, opacity: 0.5, fontFamily: gbStyles.fontEn }}>
+                {new Date(r.created_at).toLocaleDateString()}
+              </span>
+            </div>
+            <div style={{ fontSize: 11, lineHeight: 1.6, fontFamily: gbStyles.fontReadable }}>
+              <span style={{ color: 'var(--ink-2)' }}>신고자: </span>
+              <b>{r.reporter?.trainer_id ?? '알 수 없음'}</b>
+            </div>
+            <div style={{ fontSize: 11, lineHeight: 1.6, fontFamily: gbStyles.fontReadable }}>
+              <span style={{ color: 'var(--ink-2)' }}>대상: </span>
+              <b>{r.author?.trainer_id ?? '알 수 없음'}</b>
+            </div>
+            <div style={{ fontSize: 11, lineHeight: 1.6, marginBottom: 8, fontFamily: gbStyles.fontReadable }}>
+              <span style={{ color: 'var(--ink-2)' }}>사유: </span>
+              {r.reason ?? '없음'}
+            </div>
+            {r.status === 'pending' && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <PixelButton sm color="#111" bg="var(--paper)" onClick={() => updateStatus(r.id, 'dismissed')}>
+                  기각
+                </PixelButton>
+                <PixelButton sm color="#111" bg="var(--red)" fg="#FAFAF7" onClick={() => updateStatus(r.id, 'accepted')}>
+                  ✓ 신고 수락
+                </PixelButton>
+              </div>
             )}
-          </div>
-        </PixelBorder>
-      ))}
+          </PixelBorder>
+        ))
+      )}
     </div>
   )
 }
@@ -757,12 +884,51 @@ function MetaAdmin() {
 // ────────────────────────────────────────────────────────────
 // 사용자 관리 — 가입자 목록, 관리자 부여/해제
 // ────────────────────────────────────────────────────────────
+function UserBlockList({ userId }: { userId: string }) {
+  const [blocks, setBlocks] = useState<BlockedEntry[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase
+      .from('blocks')
+      .select('blocked_id, created_at, blocked:blocked_id(trainer_id)')
+      .eq('blocker_id', userId)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        setBlocks((data ?? []) as unknown as BlockedEntry[])
+        setLoading(false)
+      })
+  }, [userId])
+
+  if (loading) return <div style={{ fontSize: 10, padding: '4px 0', opacity: 0.6 }}>불러오는 중...</div>
+  if (blocks.length === 0) return <div style={{ fontSize: 10, padding: '4px 0', opacity: 0.5 }}>차단 목록 없음</div>
+
+  return (
+    <div style={{ marginTop: 6, padding: '6px 8px', border: '1px dashed #111', background: 'var(--paper)' }}>
+      <div style={{ fontSize: 9, letterSpacing: 1, opacity: 0.55, marginBottom: 4, fontFamily: gbStyles.fontEn }}>
+        BLOCKED ({blocks.length})
+      </div>
+      {blocks.map((b) => (
+        <div key={b.blocked_id} style={{ display: 'flex', gap: 8, fontSize: 10, padding: '2px 0' }}>
+          <span style={{ fontWeight: 700, fontFamily: gbStyles.fontReadable }}>
+            {b.blocked?.trainer_id ?? b.blocked_id.slice(0, 8) + '...'}
+          </span>
+          <span style={{ opacity: 0.5, fontFamily: gbStyles.fontEn }}>
+            {new Date(b.created_at).toLocaleDateString()}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function UsersAdmin() {
   const { user: me } = useAuth()
   const [list, setList] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [q, setQ] = useState('')
+  const [blocksOpen, setBlocksOpen] = useState<Record<string, boolean>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -813,6 +979,16 @@ function UsersAdmin() {
       alert(error.message)
       return
     }
+    await load()
+  }
+  async function toggleBan(uid: string, currentBanned: boolean) {
+    const msg = currentBanned ? '정지를 해제할까요?' : '이 사용자를 정지시킬까요?'
+    if (!confirm(msg)) return
+    const { error } = await supabase
+      .from('profiles')
+      .update({ banned: !currentBanned })
+      .eq('id', uid)
+    if (error) { alert(error.message); return }
     await load()
   }
 
@@ -870,6 +1046,21 @@ function UsersAdmin() {
                   ADMIN
                 </span>
               )}
+              {u.banned && (
+                <span
+                  style={{
+                    fontSize: 9,
+                    padding: '1px 5px',
+                    border: '2px solid #111',
+                    background: '#111',
+                    color: '#FAFAF7',
+                    letterSpacing: 1,
+                    fontWeight: 700,
+                  }}
+                >
+                  정지
+                </span>
+              )}
               <div
                 style={{
                   fontSize: 13,
@@ -916,7 +1107,7 @@ function UsersAdmin() {
               {' · 글 '}
               {u.posts_count}
             </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
               {u.email && (
                 <PixelButton
                   sm
@@ -927,6 +1118,27 @@ function UsersAdmin() {
                   }}
                 >
                   📋 이메일 복사
+                </PixelButton>
+              )}
+              <PixelButton
+                sm
+                color="#111"
+                bg="var(--paper)"
+                onClick={() =>
+                  setBlocksOpen((prev) => ({ ...prev, [u.id]: !prev[u.id] }))
+                }
+              >
+                {blocksOpen[u.id] ? '▲ 차단목록' : '▼ 차단목록'}
+              </PixelButton>
+              {!isMe && (
+                <PixelButton
+                  sm
+                  color="#111"
+                  bg={u.banned ? 'var(--paper)' : '#111'}
+                  fg={u.banned ? '#111' : '#FAFAF7'}
+                  onClick={() => toggleBan(u.id, u.banned)}
+                >
+                  {u.banned ? '정지 해제' : '이용 정지'}
                 </PixelButton>
               )}
               {u.is_admin ? (
@@ -963,6 +1175,7 @@ function UsersAdmin() {
                 </PixelButton>
               )}
             </div>
+            {blocksOpen[u.id] && <UserBlockList userId={u.id} />}
           </PixelBorder>
         )
       })}

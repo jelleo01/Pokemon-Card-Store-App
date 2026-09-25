@@ -8,6 +8,7 @@ import type { Post } from '@/lib/data'
 import { REGIONS } from '@/lib/data'
 import { gbStyles } from '@/lib/gbStyles'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 
 type Filter = 'latest' | 'near' | 'find'
 
@@ -67,13 +68,34 @@ function buildPost(
 
 export default function CommunityPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [filter, setFil] = useState<Filter>('latest')
   const [city, setCity] = useState('전체')
   const [district, setDistrict] = useState('전체')
   const [allPosts, setAllPosts] = useState<Post[]>([])
+  const [postUserMap, setPostUserMap] = useState<Map<string, string>>(new Map())
+  const [blockedUsers, setBlockedUsers] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
+
+  // 차단한 유저 목록 fetch
+  useEffect(() => {
+    if (!user) {
+      setBlockedUsers(new Set())
+      return
+    }
+    let alive = true
+    supabase
+      .from('blocks')
+      .select('blocked_id')
+      .eq('blocker_id', user.id)
+      .then(({ data }) => {
+        if (!alive) return
+        setBlockedUsers(new Set((data ?? []).map((r: { blocked_id: string }) => r.blocked_id)))
+      })
+    return () => { alive = false }
+  }, [user])
 
   const fetchPosts = useCallback(async () => {
     setLoading(true)
@@ -92,11 +114,12 @@ export default function CommunityPage() {
     const rows = (postRows ?? []) as PostRow[]
     if (rows.length === 0) {
       setAllPosts([])
+      setPostUserMap(new Map())
       setLoading(false)
       return
     }
 
-    const userIds = Array.from(new Set(rows.map((r) => r.user_id)))
+    const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean))) as string[]
     const shopIds = Array.from(
       new Set(rows.map((r) => r.shop_id).filter((id): id is string => !!id)),
     )
@@ -121,6 +144,10 @@ export default function CommunityPage() {
     const shopMap = new Map<string, ShopRow>()
     for (const s of (shopsRes.data ?? []) as ShopRow[]) shopMap.set(s.id, s)
 
+    const userMap = new Map<string, string>()
+    for (const r of rows) userMap.set(r.id, r.user_id)
+    setPostUserMap(userMap)
+
     setAllPosts(
       rows.map((r) =>
         buildPost(r, profileMap.get(r.user_id), r.shop_id ? shopMap.get(r.shop_id) : undefined),
@@ -142,18 +169,23 @@ export default function CommunityPage() {
     }
   }, [fetchPosts, tick])
 
+  const visiblePosts = useMemo(
+    () => allPosts.filter((p) => !blockedUsers.has(postUserMap.get(p.id) ?? '')),
+    [allPosts, blockedUsers, postUserMap],
+  )
+
   const cityFiltered = useMemo(
     () =>
       filter === 'near'
-        ? allPosts.filter((p) => {
+        ? visiblePosts.filter((p) => {
             if (city === '전체') return true
             const reg = REGIONS.find((r) => r.city === city)
             if (!reg) return true
             if (district !== '전체') return p.loc === district
             return reg.districts.includes(p.loc) || p.loc === city
           })
-        : allPosts,
-    [allPosts, filter, city, district],
+        : visiblePosts,
+    [visiblePosts, filter, city, district],
   )
 
   const feed =
@@ -163,7 +195,7 @@ export default function CommunityPage() {
         ? [...cityFiltered].sort((a, b) => a.loc.localeCompare(b.loc))
         : [...cityFiltered].sort((a, b) => a.mins - b.mins)
 
-  const questions = allPosts.filter((p) => p.tag === '질문')
+  const questions = visiblePosts.filter((p) => p.tag === '질문')
   const cityObj = REGIONS.find((r) => r.city === city)
 
   return (

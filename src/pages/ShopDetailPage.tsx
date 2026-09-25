@@ -1,320 +1,110 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import PixelBorder from '@/components/ui/PixelBorder'
 import PixelButton from '@/components/ui/PixelButton'
-import TypePin from '@/components/ui/TypePin'
 import BackButton from '@/components/ui/BackButton'
 import PostCard from '@/components/ui/PostCard'
+import PointsBadge from '@/components/ui/PointsBadge'
+import ShareButton from '@/components/ui/ShareButton'
 import { SHOPS, type Post } from '@/lib/data'
 import { gbStyles } from '@/lib/gbStyles'
 import { supabase } from '@/lib/supabase'
+import { usePoints } from '@/hooks/usePoints'
 
-interface PostRow {
-  id: string
-  body: string
-  category: 'news' | 'ask'
-  hearts_count: number | null
-  comments_count: number | null
-  created_at: string
-  user_id: string
+interface PlaceDetails {
+  place: { name: string; addr: string; type: string; hours: string | null }
+  posts: { id: string; body: string; category: 'news' | 'ask'; who: string; created_at: string; hearts_count: number; comments_count: number }[]
 }
 
-interface ProfileRow {
-  id: string
-  trainer_id: string
-}
-
-function minsAgo(iso: string): number {
-  return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
-}
-
-function buildPost(r: PostRow, profile: ProfileRow | undefined, loc: string): Post {
-  const firstLine = r.body.split('\n')[0]
-  const t = firstLine.length > 40 ? firstLine.slice(0, 40) + '…' : firstLine
-  return {
-    id: r.id,
-    who: profile?.trainer_id ?? '익명',
-    loc,
-    dong: '',
-    t,
-    body: r.body,
-    tag: r.category === 'news' ? '소식' : '질문',
-    mins: minsAgo(r.created_at),
-    hearts: r.hearts_count ?? 0,
-    comments: Array.from({ length: r.comments_count ?? 0 }, () => ({
-      who: '',
-      t: '',
-      mins: 0,
-    })),
-  }
-}
-
+// A new route visit gets a new request ID; refresh/retry within this screen
+// reuses it. StrictMode and repeated clicks cannot create a second charge.
 export default function ShopDetailPage() {
+  const { id = '' } = useParams()
+  return <PlaceVisit key={id} id={id} />
+}
+
+function PlaceVisit({ id }: { id: string }) {
   const navigate = useNavigate()
-  const { id } = useParams()
-  const shop = SHOPS.find((s) => s.id === id)
+  const { balance, error: pointsError, refreshPoints } = usePoints()
+  const preview = SHOPS.find(s => s.id === id)
+  const requestId = useRef(crypto.randomUUID())
+  const inFlight = useRef(false)
+  const alive = useRef(true)
+  const [paid, setPaid] = useState(false)
+  const [attempted, setAttempted] = useState(false)
+  const [details, setDetails] = useState<PlaceDetails | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const validId = !!preview || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
 
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
-  const [err, setErr] = useState<string | null>(null)
-  const [tick, setTick] = useState(0)
-
-  useEffect(() => {
-    if (!shop) {
-      setLoading(false)
-      return
+  async function openDetails() {
+    if (inFlight.current) return
+    inFlight.current = true
+    setBusy(true)
+    setAttempted(true)
+    setError('')
+    try {
+      if (!paid) {
+        const { error } = await supabase.rpc('card_open_place', { place_key: id, request_id: requestId.current })
+        if (error) throw error
+        if (alive.current) setPaid(true)
+        void refreshPoints()
+      }
+      const { data, error } = await supabase.rpc('card_place_details', { visit_id: requestId.current })
+      if (error) throw error
+      if (alive.current) setDetails(data as PlaceDetails)
+    } catch (e) {
+      const message = typeof e === 'object' && e !== null && 'message' in e ? String(e.message) : ''
+      if (alive.current) setError(message.includes('INSUFFICIENT_POINTS') ? '포인트가 부족해요. 소식이나 댓글을 남겨 포인트를 모아보세요.'
+        : message.includes('PLACE_NOT_FOUND') ? '매장을 찾을 수 없어요. 포인트는 차감되지 않았어요.'
+        : '정보를 불러오지 못했어요. 다시 시도해 주세요. 같은 화면에서 재시도해도 중복 차감되지 않아요.')
+    } finally {
+      inFlight.current = false
+      if (alive.current) setBusy(false)
     }
-    let alive = true
-    setLoading(true)
-    setErr(null)
-
-    ;(async () => {
-      // 1) shops 테이블에서 매장 uuid 찾기 (이름+좌표로)
-      const { data: shopRow, error: shopErr } = await supabase
-        .from('shops')
-        .select('id')
-        .eq('name', shop.name)
-        .eq('lat', shop.lat)
-        .eq('lng', shop.lng)
-        .maybeSingle()
-      if (!alive) return
-      if (shopErr) {
-        console.error('[shop lookup]', shopErr)
-        setErr(`매장 조회 실패: ${shopErr.message}`)
-        setLoading(false)
-        return
-      }
-      if (!shopRow) {
-        // 아직 supabase 에 등록되지 않은 매장 → 글이 있을 수 없음
-        setPosts([])
-        setLoading(false)
-        return
-      }
-
-      // 2) 그 매장의 posts
-      const { data: postRows, error: postErr } = await supabase
-        .from('posts')
-        .select('id, body, category, hearts_count, comments_count, created_at, user_id')
-        .eq('shop_id', shopRow.id)
-        .order('created_at', { ascending: false })
-      if (!alive) return
-      if (postErr) {
-        console.error('[shop posts]', postErr)
-        setErr(`글 목록 실패: ${postErr.message}`)
-        setLoading(false)
-        return
-      }
-      const rows = (postRows ?? []) as PostRow[]
-
-      // 3) 작성자 프로필
-      const userIds = Array.from(new Set(rows.map((r) => r.user_id)))
-      const profileMap = new Map<string, ProfileRow>()
-      if (userIds.length > 0) {
-        const { data: profiles, error: profErr } = await supabase
-          .from('profiles')
-          .select('id, trainer_id')
-          .in('id', userIds)
-        if (profErr) console.error('[shop profiles]', profErr)
-        for (const p of (profiles ?? []) as ProfileRow[]) profileMap.set(p.id, p)
-      }
-
-      const loc = shop.addr.split(' ').slice(0, 2).join(' ')
-      if (!alive) return
-      setPosts(rows.map((r) => buildPost(r, profileMap.get(r.user_id), loc)))
-      setLoading(false)
-    })().catch((e) => {
-      if (!alive) return
-      console.error('[shop detail unexpected]', e)
-      setErr(e instanceof Error ? e.message : String(e))
-      setLoading(false)
-    })
-
-    return () => {
-      alive = false
-    }
-  }, [shop, tick])
-
-  if (!shop) {
-    return (
-      <div
-        style={{
-          height: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 12,
-          fontFamily: gbStyles.font,
-          color: 'var(--ink-2)',
-        }}
-      >
-        매장을 찾을 수 없어요.
-        <PixelButton color="#111" bg="var(--paper)" onClick={() => navigate('/map')}>
-          ◀ 지도로
-        </PixelButton>
-      </div>
-    )
   }
 
-  return (
-    <div
-      style={{
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--paper)',
-        fontFamily: gbStyles.font,
-        color: 'var(--ink)',
-      }}
-    >
-      <div
-        style={{
-          padding: 'calc(12px + env(safe-area-inset-top, 0px)) 14px 8px',
-          borderBottom: '2px solid #111',
-          background: 'var(--paper-2)',
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <BackButton onClick={() => navigate('/map')} />
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              letterSpacing: 1,
-              fontFamily: gbStyles.fontEn,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              flex: 1,
-            }}
-          >
-            {shop.name}
-          </div>
-          <PixelButton
-            sm
-            color="#111"
-            bg="var(--paper)"
-            onClick={() => setTick((t) => t + 1)}
-          >
-            ↻
+  return <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--paper)', fontFamily: gbStyles.font, color: 'var(--ink)' }}>
+    <header style={{ padding: 'calc(12px + env(safe-area-inset-top, 0px)) 14px 12px', borderBottom: '2px solid #111', display: 'flex', gap: 12, alignItems: 'center' }}>
+      <BackButton onClick={() => navigate('/map')} />
+      <b style={{ flex: 1 }}>{details?.place.name ?? preview?.name ?? '장소 정보'}</b>
+      <PointsBadge />
+    </header>
+    <main style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {!validId ? <p>매장을 찾을 수 없어요.</p> : <>
+        <ShareButton placeId={id} title={details?.place.name ?? preview?.name} />
+        {!details && <PixelBorder padding={18}>
+          <h2 style={{ fontSize: 18 }}>{paid ? '정보 불러오기' : '장소 상세 정보 열기'}</h2>
+          <p style={{ fontSize: 13, lineHeight: 1.8 }}>{paid ? '이 방문의 5 P 결제가 완료되었어요. 추가 차감 없이 다시 시도할 수 있어요.' : '이 장소의 정보와 최신 소식을 확인해 보세요. 열 때 5 P가 사용되며, 나갔다가 다시 방문하면 5 P가 필요해요.'}</p>
+          <p style={{ fontSize: 12 }}>가입 +10 P · 카드 있음 / 없음 등 소식 +3 P · 다른 사람의 소식에 댓글·첫 좋아요 +1 P</p>
+          {pointsError && <p role="alert">포인트를 불러오지 못했어요. 위 포인트 버튼으로 다시 시도해 주세요.</p>}
+          <PixelButton full disabled={busy || (!paid && !attempted && (balance === undefined || balance < 5))} onClick={openDetails}>
+            {busy ? '불러오는 중…' : paid ? '다시 불러오기 (추가 차감 없음)' : attempted ? '같은 요청 다시 시도 (총 5 P)' : balance !== undefined && balance < 5 ? '포인트 부족' : '5 P 사용하고 열기'}
           </PixelButton>
-        </div>
-      </div>
-
-      <div
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: 14,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-          minHeight: 0,
-        }}
-      >
-        {/* 매장 정보 카드 */}
-        <PixelBorder color="#111" bg="var(--paper-2)" padding={12}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <TypePin type={shop.type} size={20} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 16,
-                  fontWeight: 700,
-                  fontFamily: gbStyles.fontReadable,
-                }}
-              >
-                {shop.name}
-              </div>
-              <div
-                style={{
-                  fontSize: 12,
-                  opacity: 0.75,
-                  fontFamily: gbStyles.fontReadable,
-                  marginTop: 3,
-                }}
-              >
-                {shop.type} · {shop.addr}
-              </div>
-            </div>
-          </div>
-        </PixelBorder>
-
-        {/* 매장의 글 목록 */}
-        <div>
-          <div
-            style={{
-              fontSize: 10,
-              letterSpacing: 2,
-              fontFamily: gbStyles.fontEn,
-              fontWeight: 700,
-              marginBottom: 6,
-            }}
-          >
-            POSTS · {posts.length}
-          </div>
-          {err && (
-            <div
-              style={{
-                padding: '10px 12px',
-                border: '2px solid var(--red)',
-                background: '#FCE7E7',
-                color: 'var(--red)',
-                fontSize: 11,
-                fontWeight: 700,
-                lineHeight: 1.4,
-                marginBottom: 8,
-              }}
-            >
-              ✕ {err}
-              <div style={{ marginTop: 6 }}>
-                <PixelButton
-                  sm
-                  color="#111"
-                  bg="var(--paper)"
-                  onClick={() => setTick((t) => t + 1)}
-                >
-                  ↻ 다시 시도
-                </PixelButton>
-              </div>
-            </div>
-          )}
-          {loading ? (
-            <div
-              style={{
-                padding: 24,
-                textAlign: 'center',
-                fontSize: 11,
-                color: 'var(--ink-2)',
-              }}
-            >
-              불러오는 중...
-            </div>
-          ) : posts.length === 0 && !err ? (
-            <div
-              style={{
-                padding: 24,
-                textAlign: 'center',
-                fontSize: 11,
-                color: 'var(--ink-2)',
-                lineHeight: 1.6,
-              }}
-            >
-              아직 이 매장에 대한 글이 없어요.
-              <br />첫 소식을 남겨보세요!
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {posts.map((p) => (
-                <PostCard key={p.id} p={p} onClick={() => navigate(`/post/${p.id}`)} />
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div style={{ height: 8 }} />
-      </div>
-    </div>
-  )
+          <div style={{ marginTop: 16 }}><PixelButton full onClick={() => navigate(`/post?shopId=${encodeURIComponent(id)}`)}>소식 남기고 +3 P</PixelButton></div>
+        </PixelBorder>}
+        {error && <p role="alert" style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
+        {details && <>
+          <PixelBorder padding={14}>
+            <b>{details.place.name}</b>
+            <p>{details.place.type} · {details.place.addr}</p>
+            {details.place.hours && <p>영업시간: {details.place.hours}</p>}
+            <PixelButton sm disabled={busy} onClick={openDetails}>↻ 새로고침 (무료)</PixelButton>
+          </PixelBorder>
+          <b>최신 소식 · {details.posts.length}건</b>
+          {details.posts.length === 0 && <p>아직 소식이 없어요. 첫 소식을 남겨보세요!</p>}
+          {details.posts.map(row => {
+            const post: Post = { id: row.id, who: row.who, loc: details.place.name, dong: '',
+              t: row.body.split('\n')[0].slice(0, 40), body: row.body, tag: row.category === 'news' ? '소식' : '질문',
+              mins: Math.max(0, Math.round((Date.now() - new Date(row.created_at).getTime()) / 60000)),
+              hearts: row.hearts_count ?? 0,
+              comments: Array.from({ length: row.comments_count ?? 0 }, () => ({ who: '', t: '', mins: 0 })) }
+            return <PostCard key={row.id} p={post} onClick={() => navigate(`/post/${row.id}`)} />
+          })}
+          <PixelButton onClick={() => navigate(`/post?shopId=${encodeURIComponent(id)}`)}>✎ 카드 소식 남기기 +3 P</PixelButton>
+        </>}
+      </>}
+    </main>
+  </div>
 }
