@@ -1,5 +1,4 @@
-import PointsPanel from '@/components/ui/PointsPanel'
-import ShareButton from '@/components/ui/ShareButton'
+import PointsBadge from '@/components/ui/PointsBadge'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PixelBorder from '@/components/ui/PixelBorder'
@@ -238,10 +237,9 @@ export default function ProfilePage() {
           minHeight: 0,
         }}
       >
-        <PointsPanel />
-        <ShareButton />
         {/* Trainer card */}
-        <PixelBorder color="#111" bg="var(--red)" padding={0}>
+        <PixelBorder color="#111" bg="var(--red)" padding={0} style={{ position: 'relative' }}>
+          <div style={{ position: 'absolute', top: 8, right: 10, zIndex: 1 }}><PointsBadge compact /></div>
           <div
             style={{
               padding: '14px 16px',
@@ -276,10 +274,10 @@ export default function ProfilePage() {
               >
                 TRAINER
               </div>
-              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2, paddingRight: 76, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {user?.trainerId || '?????'}
               </div>
-              <div style={{ fontSize: 10, marginTop: 4, opacity: 0.85 }}>
+              <div style={{ fontSize: 10, marginTop: 4, opacity: 0.85, overflowWrap: 'anywhere' }}>
                 {user?.email || ''}
               </div>
               {user?.isAdmin && (
@@ -304,6 +302,10 @@ export default function ProfilePage() {
           </div>
         </PixelBorder>
 
+        <div style={{ display: 'flex', gap: 12 }}>
+          <PixelButton full onClick={() => navigate('/points')}>포인트 안내</PixelButton>
+          <PixelButton full onClick={() => navigate('/points/history')}>포인트 기록</PixelButton>
+        </div>
         {/* Account */}
         <PixelBorder color="#111" bg="var(--paper-2)" padding={10}>
           <div

@@ -1,3 +1,7 @@
+import FeedbackPage from '@/pages/FeedbackPage'
+import PointsPage from '@/pages/PointsPage'
+import PointsHistoryPage from '@/pages/PointsHistoryPage'
+import PointNotifications from '@/components/ui/PointNotifications'
 import { Routes, Route } from 'react-router-dom'
 import RequireAuth from '@/components/RequireAuth'
 import HomePage from '@/pages/HomePage'
@@ -19,6 +23,8 @@ import MyPostsPage from '@/pages/MyPostsPage'
 
 export default function App() {
   return (
+    <>
+    <PointNotifications />
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -26,6 +32,9 @@ export default function App() {
       <Route path="/auth-wall" element={<AuthWallPage />} />
       <Route path="/policy" element={<PolicyPage />} />
       <Route element={<RequireAuth />}>
+        <Route path="/feedback" element={<FeedbackPage />} />
+        <Route path="/points" element={<PointsPage />} />
+        <Route path="/points/history" element={<PointsHistoryPage />} />
         <Route path="/notices" element={<NoticesPage />} />
         <Route path="/location" element={<LocationSearchPage />} />
         <Route path="/shop/:id" element={<ShopDetailPage />} />
@@ -39,5 +48,6 @@ export default function App() {
         <Route path="/my-posts" element={<MyPostsPage />} />
       </Route>
     </Routes>
+    </>
   )
 }

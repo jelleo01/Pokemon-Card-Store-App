@@ -104,3 +104,109 @@ test('place spending is validated, idempotent, private, and cannot overdraw', as
     await assert.rejects(db.exec(`insert into card_place_visits values ('40000000-0000-0000-0000-000000000099','${bob}','PC-0001',now())`), /permission denied/)
   } finally { await db.close() }
 })
+
+const upgrade = await readFile(new URL('../supabase/migrations/202609250002_points_weekly_access.sql', import.meta.url), 'utf8')
+
+test('20 P welcome, seven-day unlocks, UUID aliases, expiry and private counts', async () => {
+  const db = await setup()
+  try {
+    // Buy before upgrade: the seven-day window honors the original purchase.
+    await asUser(db, alice)
+    await db.exec(`select card_open_place('PC-0001','${visit}')`)
+    await db.exec('reset role')
+    await db.exec(upgrade)
+    assert.equal(await balance(db, alice), 15, 'only missing 10 welcome points are added')
+    assert.equal(await balance(db, bob), 20)
+    await db.exec(upgrade)
+    assert.equal(await balance(db, alice), 15, 'upgrade is idempotent')
+    const charlie = '10000000-0000-0000-0000-000000000003'
+    await db.exec(`insert into auth.users(id) values ('${charlie}'); insert into profiles(id,trainer_id) values ('${charlie}','charlie');`)
+    assert.equal(await balance(db, charlie), 20, 'new signup gets 20 directly')
+    // Represent the same seeded shop by its UUID and by its map ID.
+    await db.exec(`update shops set name=c.name, lat=c.lat, lng=c.lng from card_place_catalog c where shops.id='${shop}' and c.place_key='PC-0001';
+      insert into posts(id,user_id,shop_id,category,body) values ('${report}','${bob}','${shop}','news','카드 없음 확인');`)
+    await asUser(db, alice)
+    const summaries = (await db.query('select * from card_place_summaries()')).rows
+    assert.equal(Number(summaries.find(s => s.place_key === 'PC-0001').news_count), 1)
+    assert.equal(Number(summaries.find(s => s.place_key === shop).news_count), 1)
+    assert.ok(summaries.find(s => s.place_key === shop).expires_at)
+    const expiry = summaries.find(s => s.place_key === 'PC-0001').expires_at
+    await db.exec(`select card_open_place('${shop}','40000000-0000-0000-0000-000000000020')`)
+    assert.equal(await balance(db, alice), 15, 'same place via UUID is free within seven days')
+    const current = (await db.query(`select card_place_details('40000000-0000-0000-0000-000000000020') as d`)).rows[0].d
+    assert.equal(current.posts.length, 1)
+    assert.equal(new Date(current.expires_at).getTime(), new Date(expiry).getTime(), 'free visits do not extend expiry')
+    await db.exec(`reset role; update card_place_unlocks set expires_at=now()-interval '1 second' where user_id='${alice}';`)
+    await asUser(db, alice)
+    await assert.rejects(db.exec(`select card_place_details('${visit}')`), /PLACE_ACCESS_EXPIRED/)
+    await db.exec(`select card_open_place('PC-0001','${visit}')`)
+    assert.equal(await balance(db, alice), 15, 'expired retry token does not silently charge')
+    await db.exec(`select card_open_place('PC-0001','40000000-0000-0000-0000-000000000021')`)
+    assert.equal(await balance(db, alice), 10, 'new explicit purchase after expiry costs 5')
+    await asUser(db, bob)
+    await assert.rejects(db.exec(`select card_place_details('${visit}')`), /PAID_VISIT_REQUIRED/)
+    await assert.rejects(db.exec(`select card_place_details_v1('${visit}')`), /permission denied/)
+    await assert.rejects(db.exec(`update card_place_unlocks set expires_at=now()+interval '1 year'`), /permission denied/)
+    await asUser(db, null)
+    await assert.rejects(db.exec('select * from card_place_summaries()'), /permission denied/)
+  } finally { await db.close() }
+})
+
+test('likes on questions award once; private app feedback awards 15 regardless of rating', async () => {
+  const db = await setup()
+  try {
+    await db.exec(upgrade)
+    await asUser(db, alice)
+    await db.exec(`insert into posts(id,user_id,shop_id,category,body) values ('${question}','${alice}','${shop}','ask','재입고가 언제인가요?')`)
+    const own = (await db.query(`select card_set_like('${question}',true) as r`)).rows[0].r
+    assert.equal(own.awarded, 0)
+    await asUser(db, bob)
+    const like = (await db.query(`select card_set_like('${question}',true) as r`)).rows[0].r
+    assert.equal(like.awarded, 1)
+    assert.equal(like.hearts, 2)
+    assert.equal(await balance(db, bob), 21)
+    assert.equal((await db.query(`select card_set_like('${question}',true) as r`)).rows[0].r.awarded, 0)
+    await db.exec(`select card_set_like('${question}',false)`)
+    assert.equal((await db.query(`select card_set_like('${question}',true) as r`)).rows[0].r.awarded, 0)
+    await db.exec(`insert into comments(post_id,user_id,body) values ('${question}','${bob}','저도 궁금해요')`)
+    assert.equal(await balance(db, bob), 22)
+    await assert.rejects(db.exec("select card_submit_feedback(6,'bad','invalid rating')"), /check constraint/)
+    assert.equal(await balance(db, bob), 22)
+    assert.equal((await db.query("select card_submit_feedback(1,'개선 요청','지도가 느려요. 개선해 주세요.') as reward")).rows[0].reward, 15)
+    assert.equal(await balance(db, bob), 37, 'one star earns the full reward')
+    assert.equal((await db.query("select card_submit_feedback(5,'재시도','같은 요청 다시 전송') as reward")).rows[0].reward, 0)
+    assert.equal(await balance(db, bob), 37)
+    await assert.rejects(db.exec("update card_app_feedback set rating=5"), /permission denied/)
+    await assert.rejects(db.exec("delete from card_app_feedback"), /permission denied/)
+    await asUser(db, alice)
+    assert.equal((await db.query('select * from card_app_feedback')).rows.length, 0, 'feedback is private')
+    await db.exec(`reset role; insert into admins(user_id) values ('${alice}')`)
+    await asUser(db, alice)
+    assert.equal((await db.query('select * from card_app_feedback')).rows.length, 1, 'operators can read feedback')
+    await asUser(db, null)
+    await assert.rejects(db.exec("select card_submit_feedback(5,'test','test feedback')"), /permission denied/)
+  } finally { await db.close() }
+})
+
+test('communication rewards include questions and authors replying on their own posts', async () => {
+  const db = await setup()
+  try {
+    await db.exec(upgrade)
+    const communication = await readFile(new URL('../supabase/migrations/202609250003_communication_rewards.sql', import.meta.url), 'utf8')
+    await db.exec(communication)
+    await db.exec(communication)
+    await asUser(db, alice)
+    await db.exec(`insert into posts(id,user_id,shop_id,category,body) values ('${question}','${alice}','${shop}','ask','언제 다시 입고되나요?')`)
+    assert.equal(await balance(db, alice), 21, 'question earns 1')
+    await db.exec(`insert into comments(post_id,user_id,body) values ('${question}','${alice}','추가로 확인한 내용이에요')`)
+    assert.equal(await balance(db, alice), 22, 'author participation earns 1')
+    await db.exec(`select card_set_like('${question}',true)`)
+    assert.equal(await balance(db, alice), 22, 'self-like remains excluded')
+    await asUser(db, bob)
+    await db.exec(`insert into comments(post_id,user_id,body) values ('${question}','${bob}','내일 입고된대요'), ('${question}','${bob}','오후라고 들었어요')`)
+    assert.equal(await balance(db, bob), 22, 'each answer earns 1')
+    assert.equal((await db.query(`select card_set_like('${question}',true) as r`)).rows[0].r.awarded, 1)
+    await db.exec(`select card_set_like('${question}',false); select card_set_like('${question}',true)`)
+    assert.equal(await balance(db, bob), 23, 're-liking still earns nothing')
+  } finally { await db.close() }
+})

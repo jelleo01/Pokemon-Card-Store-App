@@ -31,7 +31,7 @@ const TYPE_DB_MAP: Record<ShopType, string> = {
 }
 
 export default function PostPage() {
-  const { refreshPoints } = usePoints()
+  const { notifyTransaction } = usePoints()
   const navigate = useNavigate()
   const { user } = useAuth()
   const [params] = useSearchParams()
@@ -164,20 +164,20 @@ export default function PostPage() {
         if (!err) setErr('매장 정보를 저장하지 못했어요.')
         return
       }
-      const { error } = await supabase.from('posts').insert({
+      const { data: createdPost, error } = await supabase.from('posts').insert({
         user_id: user.id,
         shop_id: shopUuid,
         category: category === '소식' ? 'news' : 'ask',
         body: body.trim(),
         tags: category === '소식' && stockTag ? [stockTag] : [],
-      })
+      }).select('id').single()
       if (error) {
         console.error('[post insert]', error)
         setErr(`등록 실패: ${error.message}`)
         return
       }
-      void refreshPoints()
-      setShowSuccess(true)
+      const rewarded = await notifyTransaction(`${category === '소식' ? 'report' : 'question'}:${createdPost.id}`, category === '소식' ? '카드 소식 작성' : '질문 작성')
+      if (!rewarded) setShowSuccess(true)
       // 폼 리셋 — 같은 페이지에서 다음 글 바로 쓸 수 있게
       setBody('')
       setStock('')
@@ -238,7 +238,7 @@ export default function PostPage() {
           </PixelButton>
         </div>
         <div style={{ fontSize: 10, marginTop: 6, opacity: 0.6, letterSpacing: 1 }}>
-          ※ 카드 있음·없음 등 매장 소식을 올리면 +3 P (질문 제외)
+          ※ 카드 소식 +3 P · 질문 작성 +1 P
         </div>
         {err && (
           <div
@@ -535,7 +535,7 @@ export default function PostPage() {
               icon="card"
               title="질문"
               en="ask"
-              sub="다른 트레이너에게"
+              sub="다른 트레이너에게 · +1 P"
             />
           </div>
         </div>
@@ -684,7 +684,7 @@ export default function PostPage() {
                     color: '#1a8a3e',
                   }}
                 >
-                  등록 완료! {category === '소식' ? '+3 P' : ''}
+                  등록 완료!
                 </div>
                 <div
                   style={{
