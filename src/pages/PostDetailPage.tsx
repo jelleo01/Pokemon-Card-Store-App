@@ -1,3 +1,4 @@
+import { usePoints } from '@/hooks/usePoints'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import PixelBorder from '@/components/ui/PixelBorder'
@@ -10,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext'
 
 interface PostDetail {
   id: string
+  userId: string
   body: string
   category: 'news' | 'ask'
   hearts_count: number
@@ -20,6 +22,10 @@ interface PostDetail {
   shop_name: string
 }
 
+type ReportTarget = { type: 'post'; id: string; authorId: string } | { type: 'comment'; id: string; authorId: string }
+
+const REPORT_REASONS = ['스팸 / 광고', '부적절한 내용', '욕설 / 혐오 표현', '허위 정보']
+
 interface CommentRow {
   id: string
   body: string
@@ -28,11 +34,22 @@ interface CommentRow {
   profiles: { trainer_id: string } | null
 }
 
-function minsAgo(iso: string): number {
-  return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+function timeAgo(iso: string): string {
+  const n = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+  if (n < 1) return '방금'
+  if (n < 60) return `${n}분 전`
+  const h = Math.round(n / 60)
+  if (h < 24) return `${h}시간 전`
+  const d = Math.round(n / 1440)
+  if (d < 30) return `${d}일 전`
+  const mo = Math.round(n / (30 * 1440))
+  if (mo < 12) return `${mo}달 전`
+  return `${Math.round(n / (365 * 1440))}년 전`
 }
 
 export default function PostDetailPage() {
+  const { refreshPoints } = usePoints()
+  const [liking, setLiking] = useState(false)
   const navigate = useNavigate()
   const { user } = useAuth()
   const { id } = useParams()
@@ -45,6 +62,16 @@ export default function PostDetailPage() {
   const [hearts, setHearts] = useState(0)
   const [draft, setDraft] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  // 신고
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null)
+  const [reportReason, setReportReason] = useState('')
+  const [reportSubmitting, setReportSubmitting] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+
+  // 차단
+  const [blockTarget, setBlockTarget] = useState<{ userId: string; name: string } | null>(null)
+  const [blockSubmitting, setBlockSubmitting] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -98,6 +125,7 @@ export default function PostDetailPage() {
 
       setPost({
         id: postRow.id,
+        userId: postRow.user_id,
         body: postRow.body,
         category: postRow.category,
         hearts_count: postRow.hearts_count ?? 0,
@@ -181,7 +209,8 @@ export default function PostDetailPage() {
   }, [id, user])
 
   async function toggleHeart() {
-    if (!id || !user) return
+    if (!id || !user || liking) return
+    setLiking(true)
     if (hearted) {
       setHeart(false)
       setHearts((h) => Math.max(0, h - 1))
@@ -205,10 +234,66 @@ export default function PostDetailPage() {
         setHearts((h) => Math.max(0, h - 1))
       }
     }
+    setLiking(false)
+    void refreshPoints()
+  }
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 2500)
+  }
+
+  async function submitReport() {
+    if (!reportTarget || !user) return
+    setReportSubmitting(true)
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: user.id,
+      target_type: reportTarget.type,
+      target_id: reportTarget.id,
+      author_id: reportTarget.authorId,
+      reason: reportReason || '기타',
+    })
+    setReportSubmitting(false)
+    setReportTarget(null)
+    setReportReason('')
+    if (error) {
+      showToast('신고 처리 중 오류가 발생했어요.')
+    } else {
+      showToast('신고가 접수되었어요.')
+    }
+  }
+
+  async function deleteComment(commentId: string) {
+    if (!user) return
+    if (!confirm('댓글을 삭제할까요?')) return
+    const { error } = await supabase.from('comments').delete().eq('id', commentId).eq('user_id', user.id)
+    if (error) { alert(error.message); return }
+    setComments((prev) => prev.filter((c) => c.id !== commentId))
+  }
+
+  async function handleDeletePost() {
+    if (!id || !user || !post) return
+    if (!confirm('이 글을 삭제할까요? 복구할 수 없어요.')) return
+    const { error } = await supabase.from('posts').delete().eq('id', id).eq('user_id', user.id)
+    if (error) { alert(error.message); return }
+    navigate('/community')
+  }
+
+  async function confirmBlock() {
+    if (!blockTarget || !user) return
+    setBlockSubmitting(true)
+    await supabase.from('blocks').insert({
+      blocker_id: user.id,
+      blocked_id: blockTarget.userId,
+    })
+    setBlockSubmitting(false)
+    setBlockTarget(null)
+    showToast(`${blockTarget.name} 트레이너를 차단했어요.`)
+    navigate('/community')
   }
 
   async function submitComment() {
-    if (!id || !user) return
+    if (!id || !user || submitting) return
     const text = draft.trim()
     if (!text) return
     setSubmitting(true)
@@ -232,6 +317,8 @@ export default function PostDetailPage() {
       },
     ])
     setDraft('')
+    void refreshPoints()
+    if (post?.userId !== user.id && post?.category === 'news') showToast('댓글 등록 완료! +1 P')
   }
 
   if (loading) {
@@ -358,7 +445,7 @@ export default function PostDetailPage() {
                 fontFamily: gbStyles.fontReadable,
               }}
             >
-              {minsAgo(post.created_at)}m
+              {timeAgo(post.created_at)}
             </span>
           </div>
           <div
@@ -411,7 +498,7 @@ export default function PostDetailPage() {
             <div style={{ flex: 1 }} />
             <button
               onClick={toggleHeart}
-              disabled={!user}
+              disabled={liking || !user}
               style={{
                 padding: '4px 10px',
                 border: '2px solid #111',
@@ -442,6 +529,54 @@ export default function PostDetailPage() {
             >
               💬 {comments.length}
             </div>
+            {user && post.userId === user.id && (
+              <button
+                onClick={handleDeletePost}
+                style={{
+                  padding: '4px 8px',
+                  border: '2px solid var(--red)',
+                  background: 'var(--paper)',
+                  fontSize: 10,
+                  cursor: 'pointer',
+                  fontFamily: gbStyles.font,
+                  color: 'var(--red)',
+                }}
+              >
+                삭제
+              </button>
+            )}
+            {user && post.userId !== user.id && (
+              <>
+                <button
+                  onClick={() => setReportTarget({ type: 'post', id: post.id, authorId: post.userId })}
+                  style={{
+                    padding: '4px 8px',
+                    border: '2px solid #111',
+                    background: 'var(--paper)',
+                    fontSize: 10,
+                    cursor: 'pointer',
+                    fontFamily: gbStyles.font,
+                    color: '#111',
+                  }}
+                >
+                  신고
+                </button>
+                <button
+                  onClick={() => setBlockTarget({ userId: post.userId, name: post.who })}
+                  style={{
+                    padding: '4px 8px',
+                    border: '2px solid #111',
+                    background: 'var(--paper)',
+                    fontSize: 10,
+                    cursor: 'pointer',
+                    fontFamily: gbStyles.font,
+                    color: '#111',
+                  }}
+                >
+                  차단
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -486,8 +621,40 @@ export default function PostDetailPage() {
                         fontSize: 10,
                       }}
                     >
-                      {minsAgo(c.created_at)}m
+                      {timeAgo(c.created_at)}
                     </span>
+                    {user && c.user_id === user.id && (
+                      <button
+                        onClick={() => deleteComment(c.id)}
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          fontSize: 9,
+                          color: 'var(--red)',
+                          cursor: 'pointer',
+                          fontFamily: gbStyles.font,
+                          padding: '0 2px',
+                        }}
+                      >
+                        삭제
+                      </button>
+                    )}
+                    {user && c.user_id !== user.id && (
+                      <button
+                        onClick={() => setReportTarget({ type: 'comment', id: c.id, authorId: c.user_id })}
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          fontSize: 9,
+                          color: 'var(--ink-2)',
+                          cursor: 'pointer',
+                          fontFamily: gbStyles.font,
+                          padding: '0 2px',
+                        }}
+                      >
+                        신고
+                      </button>
+                    )}
                   </div>
                   <div
                     style={{
@@ -521,7 +688,8 @@ export default function PostDetailPage() {
       <div
         style={{
           borderTop: '2px solid #111',
-          padding: 8,
+          padding: '10px 8px',
+          paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
           background: 'var(--paper-2)',
           flexShrink: 0,
           display: 'flex',
@@ -531,7 +699,7 @@ export default function PostDetailPage() {
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={user ? '댓글 달기...' : '로그인이 필요해요'}
+          placeholder={user ? '다른 사람의 소식에 댓글 +1 P' : '로그인이 필요해요'}
           disabled={!user}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -561,6 +729,111 @@ export default function PostDetailPage() {
           {submitting ? '...' : '등록'}
         </PixelButton>
       </div>
+
+      {/* 신고 모달 */}
+      {reportTarget && (
+        <div
+          style={{
+            position: 'absolute', inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 60, padding: 24,
+          }}
+          onClick={() => setReportTarget(null)}
+        >
+          <div onClick={(e) => e.stopPropagation()}>
+            <PixelBorder color="#111" bg="var(--paper)" padding={0}>
+              <div style={{ padding: '16px 20px', minWidth: 260 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, fontFamily: gbStyles.fontReadable }}>
+                  {reportTarget.type === 'post' ? '게시글 신고' : '댓글 신고'}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                  {REPORT_REASONS.map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => setReportReason(r)}
+                      style={{
+                        padding: '7px 10px', border: '2px solid #111', textAlign: 'left',
+                        background: reportReason === r ? '#111' : 'var(--paper)',
+                        color: reportReason === r ? '#FAFAF7' : '#111',
+                        fontSize: 12, cursor: 'pointer', fontFamily: gbStyles.fontReadable, fontWeight: 600,
+                      }}
+                    >
+                      {reportReason === r ? '✓ ' : ''}{r}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <PixelButton full color="#111" bg="var(--paper)" onClick={() => setReportTarget(null)}>
+                    취소
+                  </PixelButton>
+                  <PixelButton
+                    full color="#111" bg="var(--red)" fg="#FAFAF7"
+                    onClick={submitReport}
+                    disabled={!reportReason || reportSubmitting}
+                  >
+                    {reportSubmitting ? '...' : '신고하기'}
+                  </PixelButton>
+                </div>
+              </div>
+            </PixelBorder>
+          </div>
+        </div>
+      )}
+
+      {/* 차단 확인 모달 */}
+      {blockTarget && (
+        <div
+          style={{
+            position: 'absolute', inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 60, padding: 24,
+          }}
+          onClick={() => setBlockTarget(null)}
+        >
+          <div onClick={(e) => e.stopPropagation()}>
+            <PixelBorder color="#111" bg="var(--paper)" padding={0}>
+              <div style={{ padding: '20px 24px', minWidth: 260 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, fontFamily: gbStyles.fontReadable }}>
+                  트레이너 차단
+                </div>
+                <div style={{ fontSize: 12, lineHeight: 1.6, marginBottom: 16, fontFamily: gbStyles.fontReadable, color: 'var(--ink-2)' }}>
+                  <b>{blockTarget.name}</b> 트레이너를 차단하면<br />
+                  이 트레이너의 글이 피드에서 사라져요.
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <PixelButton full color="#111" bg="var(--paper)" onClick={() => setBlockTarget(null)}>
+                    취소
+                  </PixelButton>
+                  <PixelButton
+                    full color="#111" bg="#111" fg="#FAFAF7"
+                    onClick={confirmBlock}
+                    disabled={blockSubmitting}
+                  >
+                    {blockSubmitting ? '...' : '차단하기'}
+                  </PixelButton>
+                </div>
+              </div>
+            </PixelBorder>
+          </div>
+        </div>
+      )}
+
+      {/* 토스트 알림 */}
+      {toast && (
+        <div
+          style={{
+            position: 'absolute', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+            background: '#111', color: '#FAFAF7',
+            padding: '8px 16px', fontSize: 12, fontFamily: gbStyles.fontReadable,
+            border: '2px solid #FAFAF7', whiteSpace: 'nowrap', zIndex: 70,
+            boxShadow: '3px 3px 0 0 rgba(0,0,0,0.3)',
+          }}
+        >
+          {toast}
+        </div>
+      )}
     </div>
   )
 }

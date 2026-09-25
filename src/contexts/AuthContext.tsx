@@ -1,3 +1,4 @@
+import { pendingRedirect } from '@/lib/authRedirect'
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
@@ -146,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin + '/',
+          redirectTo: window.location.origin + import.meta.env.BASE_URL + 'login?redirect=' + encodeURIComponent(pendingRedirect()),
         },
       })
       if (error) throw error
@@ -168,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
-        options: { redirectTo: window.location.origin + '/' },
+        options: { redirectTo: window.location.origin + import.meta.env.BASE_URL + 'login?redirect=' + encodeURIComponent(pendingRedirect()) },
       })
       if (error) throw error
     }

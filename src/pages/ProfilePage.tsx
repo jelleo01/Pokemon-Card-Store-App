@@ -1,3 +1,5 @@
+import PointsPanel from '@/components/ui/PointsPanel'
+import ShareButton from '@/components/ui/ShareButton'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PixelBorder from '@/components/ui/PixelBorder'
@@ -9,10 +11,10 @@ import { supabase } from '@/lib/supabase'
 import { gbStyles } from '@/lib/gbStyles'
 import { REGIONS } from '@/lib/data'
 
-interface Stats {
-  posts: number
-  hearts: number
-  comments: number
+interface BlockedUser {
+  blocked_id: string
+  created_at: string
+  blocked: { trainer_id: string } | null
 }
 
 const ID_RE = /^[가-힣A-Za-z0-9_]{2,12}$/
@@ -30,8 +32,11 @@ export default function ProfilePage() {
   const [city, setCity] = useState(user?.city || '서울')
   const [district, setDistrict] = useState(user?.district || '')
 
-  const [stats, setStats] = useState<Stats>({ posts: 0, hearts: 0, comments: 0 })
   const [version, setVersion] = useState('v0.1')
+  const [blockedList, setBlockedList] = useState<BlockedUser[]>([])
+  const [unblocking, setUnblocking] = useState<string | null>(null)
+  const [deleteStep, setDeleteStep] = useState<0 | 1 | 2>(0)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -41,31 +46,29 @@ export default function ProfilePage() {
     setDistrict(user.district || '')
   }, [user])
 
-  // 통계 fetch — 내가 쓴 글 + 받은 하트/댓글
+  // 차단 목록 fetch
   useEffect(() => {
     if (!user) return
     let alive = true
     supabase
-      .from('posts')
-      .select('hearts_count, comments_count')
-      .eq('user_id', user.id)
-      .then(({ data, error }) => {
+      .from('blocks')
+      .select('blocked_id, created_at, blocked:blocked_id(trainer_id)')
+      .eq('blocker_id', user.id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
         if (!alive) return
-        if (error) {
-          console.error('[stats]', error)
-          return
-        }
-        const rows = data ?? []
-        setStats({
-          posts: rows.length,
-          hearts: rows.reduce((s, p) => s + (p.hearts_count ?? 0), 0),
-          comments: rows.reduce((s, p) => s + (p.comments_count ?? 0), 0),
-        })
+        setBlockedList((data ?? []) as unknown as BlockedUser[])
       })
-    return () => {
-      alive = false
-    }
+    return () => { alive = false }
   }, [user])
+
+  async function unblock(blockedId: string) {
+    if (!user) return
+    setUnblocking(blockedId)
+    await supabase.from('blocks').delete().eq('blocker_id', user.id).eq('blocked_id', blockedId)
+    setBlockedList((prev) => prev.filter((b) => b.blocked_id !== blockedId))
+    setUnblocking(null)
+  }
 
   // 버전 fetch from app_meta
   useEffect(() => {
@@ -134,6 +137,19 @@ export default function ProfilePage() {
     navigate('/')
   }
 
+  async function handleDeleteAccount() {
+    setDeleting(true)
+    const { error } = await supabase.rpc('delete_user')
+    if (error) {
+      alert('계정 삭제 중 오류가 발생했어요: ' + error.message)
+      setDeleting(false)
+      setDeleteStep(0)
+      return
+    }
+    await signOut()
+    navigate('/')
+  }
+
   const regionLabel = user?.city
     ? user.district
       ? `${user.city} ${user.district}`
@@ -189,14 +205,24 @@ export default function ProfilePage() {
               </PixelButton>
             </>
           ) : (
-            <PixelButton
-              sm
-              color="#111"
-              bg="var(--paper)"
-              onClick={() => setEditing(true)}
-            >
-              ✎ 편집
-            </PixelButton>
+            <>
+              <PixelButton
+                sm
+                color="#111"
+                bg="var(--paper)"
+                onClick={() => navigate('/my-posts')}
+              >
+                내 글
+              </PixelButton>
+              <PixelButton
+                sm
+                color="#111"
+                bg="var(--paper)"
+                onClick={() => setEditing(true)}
+              >
+                ✎ 편집
+              </PixelButton>
+            </>
           )}
         </div>
       </div>
@@ -212,6 +238,8 @@ export default function ProfilePage() {
           minHeight: 0,
         }}
       >
+        <PointsPanel />
+        <ShareButton />
         {/* Trainer card */}
         <PixelBorder color="#111" bg="var(--red)" padding={0}>
           <div
@@ -275,36 +303,6 @@ export default function ProfilePage() {
             </div>
           </div>
         </PixelBorder>
-
-        {/* Stats strip */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          {[
-            { k: '쓴 글', v: stats.posts },
-            { k: '하트', v: stats.hearts },
-            { k: '댓글', v: stats.comments },
-          ].map((s) => (
-            <PixelBorder
-              key={s.k}
-              color="#111"
-              bg="var(--paper)"
-              padding={8}
-              style={{ flex: 1, textAlign: 'center' }}
-            >
-              <div style={{ fontSize: 9, letterSpacing: 1, color: 'var(--ink-2)' }}>
-                {s.k}
-              </div>
-              <div
-                style={{
-                  fontSize: 18,
-                  fontWeight: 700,
-                  fontFamily: gbStyles.fontEn,
-                }}
-              >
-                {s.v}
-              </div>
-            </PixelBorder>
-          ))}
-        </div>
 
         {/* Account */}
         <PixelBorder color="#111" bg="var(--paper-2)" padding={10}>
@@ -474,9 +472,126 @@ export default function ProfilePage() {
           </div>
         </PixelBorder>
 
+        {/* 차단 목록 */}
+        {blockedList.length > 0 && (
+          <PixelBorder color="#111" bg="var(--paper-2)" padding={10}>
+            <div
+              style={{
+                fontSize: 10,
+                letterSpacing: 2,
+                marginBottom: 8,
+                fontFamily: gbStyles.fontEn,
+                fontWeight: 700,
+              }}
+            >
+              BLOCKED · {blockedList.length}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {blockedList.map((b) => (
+                <div
+                  key={b.blocked_id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '4px 0',
+                    borderBottom: '1px dashed rgba(0,0,0,0.15)',
+                  }}
+                >
+                  <span
+                    style={{
+                      flex: 1,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      fontFamily: gbStyles.fontReadable,
+                    }}
+                  >
+                    {b.blocked?.trainer_id ?? '알 수 없음'}
+                  </span>
+                  <button
+                    onClick={() => unblock(b.blocked_id)}
+                    disabled={unblocking === b.blocked_id}
+                    style={{
+                      fontSize: 10,
+                      padding: '3px 8px',
+                      border: '2px solid #111',
+                      background: 'var(--paper)',
+                      cursor: 'pointer',
+                      fontFamily: gbStyles.font,
+                      opacity: unblocking === b.blocked_id ? 0.5 : 1,
+                    }}
+                  >
+                    차단 해제
+                  </button>
+                </div>
+              ))}
+            </div>
+          </PixelBorder>
+        )}
+
         <PixelButton full color="#111" bg="var(--paper)" onClick={handleLogout}>
           로그아웃
         </PixelButton>
+
+        {/* 계정 삭제 */}
+        {deleteStep === 0 && (
+          <button
+            onClick={() => setDeleteStep(1)}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: 11,
+              color: 'var(--ink-2)',
+              opacity: 0.5,
+              cursor: 'pointer',
+              textAlign: 'center',
+              textDecoration: 'underline',
+              fontFamily: gbStyles.font,
+              padding: '4px 0',
+            }}
+          >
+            계정 삭제
+          </button>
+        )}
+
+        {deleteStep === 1 && (
+          <PixelBorder color="var(--red)" bg="var(--paper)" padding={12}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--red)', marginBottom: 6 }}>
+              정말 계정을 삭제할까요?
+            </div>
+            <div style={{ fontSize: 11, lineHeight: 1.6, color: 'var(--ink-2)', marginBottom: 10 }}>
+              삭제 시 작성한 글·댓글·하트가 모두 함께 삭제되며
+              <br />복구가 불가능합니다.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <PixelButton sm full color="#111" bg="var(--paper)" onClick={() => setDeleteStep(0)}>
+                취소
+              </PixelButton>
+              <PixelButton sm full color="#111" bg="var(--red)" fg="#FAFAF7" onClick={() => setDeleteStep(2)}>
+                계속
+              </PixelButton>
+            </div>
+          </PixelBorder>
+        )}
+
+        {deleteStep === 2 && (
+          <PixelBorder color="var(--red)" bg="#FCE7E7" padding={12}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--red)', marginBottom: 6 }}>
+              최종 확인
+            </div>
+            <div style={{ fontSize: 11, lineHeight: 1.6, marginBottom: 10 }}>
+              아래 버튼을 누르면 즉시 계정이 삭제됩니다.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <PixelButton sm full color="#111" bg="var(--paper)" onClick={() => setDeleteStep(0)} disabled={deleting}>
+                취소
+              </PixelButton>
+              <PixelButton sm full color="#111" bg="var(--red)" fg="#FAFAF7" onClick={handleDeleteAccount} disabled={deleting}>
+                {deleting ? '삭제 중...' : '계정 영구 삭제'}
+              </PixelButton>
+            </div>
+          </PixelBorder>
+        )}
       </div>
     </div>
   )

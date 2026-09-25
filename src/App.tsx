@@ -15,26 +15,28 @@ import NoticesPage from '@/pages/NoticesPage'
 import InquiryPage from '@/pages/InquiryPage'
 import PolicyPage from '@/pages/PolicyPage'
 import AdminPage from '@/pages/AdminPage'
+import MyPostsPage from '@/pages/MyPostsPage'
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
-      <Route path="/map" element={<MapPage />} />
-      <Route path="/shop/:id" element={<ShopDetailPage />} />
-      <Route path="/location" element={<LocationSearchPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/auth-wall" element={<AuthWallPage />} />
-      <Route path="/notices" element={<NoticesPage />} />
       <Route path="/policy" element={<PolicyPage />} />
       <Route element={<RequireAuth />}>
+        <Route path="/notices" element={<NoticesPage />} />
+        <Route path="/location" element={<LocationSearchPage />} />
+        <Route path="/shop/:id" element={<ShopDetailPage />} />
+        <Route path="/map" element={<MapPage />} />
         <Route path="/post" element={<PostPage />} />
         <Route path="/community" element={<CommunityPage />} />
         <Route path="/post/:id" element={<PostDetailPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/inquiry" element={<InquiryPage />} />
         <Route path="/admin" element={<AdminPage />} />
+        <Route path="/my-posts" element={<MyPostsPage />} />
       </Route>
     </Routes>
   )

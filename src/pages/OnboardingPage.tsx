@@ -1,3 +1,4 @@
+import { safeRedirect } from '@/lib/authRedirect'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import PixelBorder from '@/components/ui/PixelBorder'
@@ -14,7 +15,7 @@ export default function OnboardingPage() {
   const navigate = useNavigate()
   const { user, loading: authLoading, refresh } = useAuth()
   const [params] = useSearchParams()
-  const redirect = params.get('redirect') || '/'
+  const redirect = safeRedirect(params.get('redirect'))
 
   const [trainerId, setTrainerId] = useState('')
   const [city, setCity] = useState('서울')

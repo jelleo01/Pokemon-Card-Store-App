@@ -1,3 +1,4 @@
+import { safeRedirect, rememberRedirect } from '@/lib/authRedirect'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import PixelBorder from '@/components/ui/PixelBorder'
@@ -11,15 +12,17 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const { user, loading, signInWithGoogle, signInWithApple } = useAuth()
   const [params] = useSearchParams()
-  const redirect = params.get('redirect') || '/'
+  const redirect = safeRedirect(params.get('redirect'))
 
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [agreed, setAgreed] = useState(false)
 
   // 이미 로그인된 상태로 들어왔으면 바로 redirect
   useEffect(() => {
     if (loading) return
     if (!user) return
+    sessionStorage.removeItem('loginRedirect')
     if (!user.trainerId) {
       navigate(`/onboarding?redirect=${encodeURIComponent(redirect)}`, { replace: true })
     } else {
@@ -28,6 +31,7 @@ export default function LoginPage() {
   }, [user, loading, navigate, redirect])
 
   async function handleGoogle() {
+    rememberRedirect(redirect)
     setErr(null)
     setBusy(true)
     const t = setTimeout(() => {
@@ -45,6 +49,7 @@ export default function LoginPage() {
   }
 
   async function handleApple() {
+    rememberRedirect(redirect)
     setErr(null)
     setBusy(true)
     try {
@@ -120,54 +125,81 @@ export default function LoginPage() {
         </div>
 
         <PixelBorder color="#111" bg="var(--paper-2)" padding={14}>
-          <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
             ▶ 트레이너 등록
           </div>
-          <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 12, lineHeight: 1.5 }}>
-            구글 계정으로 로그인하면 트레이너 ID를 만들 수 있어요.
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 14, lineHeight: 1.6 }}>
+            로그인하면 트레이너 ID를 만들 수 있어요.
           </div>
 
-          <PixelButton
-            full
-            color="#111"
-            bg="#FAFAF7"
-            fg="#111"
-            onClick={handleGoogle}
-            disabled={busy}
+          {/* 약관 동의 */}
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+              cursor: 'pointer',
+              marginBottom: 12,
+            }}
           >
-            <span
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                justifyContent: 'center',
-              }}
-            >
-              <GoogleG />
-              <span>{busy ? '이동 중...' : 'Google로 시작하기'}</span>
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              style={{ marginTop: 3, width: 14, height: 14, cursor: 'pointer', flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 12, lineHeight: 1.6, fontFamily: gbStyles.font, color: 'var(--ink)' }}>
+              <b>이용약관</b>에 동의합니다.
+              <br />
+              <span style={{ fontSize: 11, opacity: 0.7 }}>
+                본 앱은 부적절한 콘텐츠 및 욕설, 스팸을 포함한 어떠한 유해 행위도 허용하지 않으며, 위반 시 즉시 조치합니다.
+              </span>
             </span>
-          </PixelButton>
+          </label>
 
-          <PixelButton
-            full
-            color="#111"
-            bg="#111"
-            fg="#FAFAF7"
-            onClick={handleApple}
-            disabled={busy}
-          >
-            <span
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                justifyContent: 'center',
-              }}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <PixelButton
+              full
+              color="#111"
+              bg="#FAFAF7"
+              fg="#111"
+              onClick={handleGoogle}
+              disabled={busy || !agreed}
             >
-              <AppleLogo />
-              <span>{busy ? '이동 중...' : 'Apple로 시작하기'}</span>
-            </span>
-          </PixelButton>
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  justifyContent: 'center',
+                }}
+              >
+                <GoogleG />
+                <span>{busy ? '이동 중...' : 'Google로 시작하기'}</span>
+              </span>
+            </PixelButton>
+
+            <PixelButton
+              full
+              color="#111"
+              bg="#111"
+              fg="#FAFAF7"
+              onClick={handleApple}
+              disabled={busy || !agreed}
+            >
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  justifyContent: 'center',
+                }}
+              >
+                <AppleLogo />
+                <span>{busy ? '이동 중...' : 'Apple로 시작하기'}</span>
+              </span>
+            </PixelButton>
+          </div>
 
           {err && (
             <div
