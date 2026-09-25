@@ -16,12 +16,13 @@ export default function PointsPage() {
         <h2 style={{ fontWeight: 700, marginBottom: 16 }}>포인트 모으기</h2>
         <ul style={{ lineHeight: 2.1, paddingLeft: 18, listStyle: 'disc' }}>
           <li>처음 가입하면 <b>+20 P</b></li>
-          <li>가게의 카드 소식 작성 <b>+3 P</b><br /><small>카드 있음·없음 모두 포함해요. 질문은 제외해요.</small></li>
-          <li>다른 사람의 글에 댓글 작성 <b>+1 P</b></li>
+          <li>가게의 카드 소식 작성 <b>+3 P</b><br /><small>카드 있음·없음 모두 포함해요.</small></li>
+          <li>질문 작성 <b>+1 P</b></li>
+          <li>댓글·답변 작성 <b>+1 P</b><br /><small>내 글에서 이어가는 대화도 포함해요.</small></li>
           <li>다른 사람의 글에 첫 좋아요 <b>+1 P</b></li>
           <li>홈에서 앱 사용 후기 최초 제출 <b>+15 P</b><br /><small>별점과 관계없이 계정당 한 번 지급해요.</small></li>
         </ul>
-        <p style={{ fontSize: 12, marginTop: 14, lineHeight: 1.8 }}>내 글에 남기는 댓글·좋아요는 적립되지 않아요. 좋아요를 취소했다 다시 눌러도 중복 적립되지 않아요.</p>
+        <p style={{ fontSize: 12, marginTop: 14, lineHeight: 1.8 }}>내 글에 누르는 좋아요는 적립되지 않아요. 좋아요를 취소했다 다시 눌러도 중복 적립되지 않아요.</p>
       </PixelBorder>
       <PixelBorder padding={18}>
         <h2 style={{ fontWeight: 700, marginBottom: 16 }}>장소 정보 열람</h2>

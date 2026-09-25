@@ -15,14 +15,20 @@ The legacy `point_transactions` table is preserved. The application uses
 `card_point_accounts` and `card_point_entries`; it does not import legacy balances.
 No existing account balance or point history is reset by migration 002.
 
+## Communication update
+
+After migration 002, run `supabase/migrations/202609250003_communication_rewards.sql`.
+This extends rewards to question posts and comments/answers on one's own posts.
+It applies to new activity; old activity is not retroactively credited.
+
 ## Current rules
 
 - New signup: 20 P once per auth account.
 - Members who previously received 10 P receive the missing 10 P once, even if
   they already spent their gift. This is recorded as `welcome_adjustment`.
-- Each news post about a place: +3 P, including no-stock reports. Questions and
-  moderation reports do not earn a report reward.
-- Each comment on another person's post: +1 P, including question posts.
+- Each news post about a place: +3 P, including no-stock reports. Question posts earn +1 P.
+  Moderation reports do not earn rewards.
+- Each comment/answer: +1 P, including question posts and discussion on one's own post.
 - First like on another person's post: +1 P, including question posts. Self-likes
   and unliking/re-liking do not earn more points. Like RPC returns the actual award.
 - A place costs 5 P for seven days. Returning during that window is free,

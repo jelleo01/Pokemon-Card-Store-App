@@ -176,7 +176,7 @@ export default function PostPage() {
         setErr(`등록 실패: ${error.message}`)
         return
       }
-      const rewarded = await notifyTransaction(`report:${createdPost.id}`, '카드 소식 작성')
+      const rewarded = await notifyTransaction(`${category === '소식' ? 'report' : 'question'}:${createdPost.id}`, category === '소식' ? '카드 소식 작성' : '질문 작성')
       if (!rewarded) setShowSuccess(true)
       // 폼 리셋 — 같은 페이지에서 다음 글 바로 쓸 수 있게
       setBody('')
@@ -238,7 +238,7 @@ export default function PostPage() {
           </PixelButton>
         </div>
         <div style={{ fontSize: 10, marginTop: 6, opacity: 0.6, letterSpacing: 1 }}>
-          ※ 카드 있음·없음 등 매장 소식을 올리면 +3 P (질문 제외)
+          ※ 카드 소식 +3 P · 질문 작성 +1 P
         </div>
         {err && (
           <div
@@ -535,7 +535,7 @@ export default function PostPage() {
               icon="card"
               title="질문"
               en="ask"
-              sub="다른 트레이너에게"
+              sub="다른 트레이너에게 · +1 P"
             />
           </div>
         </div>

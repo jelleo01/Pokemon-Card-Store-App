@@ -187,3 +187,26 @@ test('likes on questions award once; private app feedback awards 15 regardless o
     await assert.rejects(db.exec("select card_submit_feedback(5,'test','test feedback')"), /permission denied/)
   } finally { await db.close() }
 })
+
+test('communication rewards include questions and authors replying on their own posts', async () => {
+  const db = await setup()
+  try {
+    await db.exec(upgrade)
+    const communication = await readFile(new URL('../supabase/migrations/202609250003_communication_rewards.sql', import.meta.url), 'utf8')
+    await db.exec(communication)
+    await db.exec(communication)
+    await asUser(db, alice)
+    await db.exec(`insert into posts(id,user_id,shop_id,category,body) values ('${question}','${alice}','${shop}','ask','언제 다시 입고되나요?')`)
+    assert.equal(await balance(db, alice), 21, 'question earns 1')
+    await db.exec(`insert into comments(post_id,user_id,body) values ('${question}','${alice}','추가로 확인한 내용이에요')`)
+    assert.equal(await balance(db, alice), 22, 'author participation earns 1')
+    await db.exec(`select card_set_like('${question}',true)`)
+    assert.equal(await balance(db, alice), 22, 'self-like remains excluded')
+    await asUser(db, bob)
+    await db.exec(`insert into comments(post_id,user_id,body) values ('${question}','${bob}','내일 입고된대요'), ('${question}','${bob}','오후라고 들었어요')`)
+    assert.equal(await balance(db, bob), 22, 'each answer earns 1')
+    assert.equal((await db.query(`select card_set_like('${question}',true) as r`)).rows[0].r.awarded, 1)
+    await db.exec(`select card_set_like('${question}',false); select card_set_like('${question}',true)`)
+    assert.equal(await balance(db, bob), 23, 're-liking still earns nothing')
+  } finally { await db.close() }
+})

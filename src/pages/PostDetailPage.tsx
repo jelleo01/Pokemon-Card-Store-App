@@ -305,7 +305,7 @@ export default function PostDetailPage() {
     ])
     setDraft('')
     void refreshPoints()
-    void notifyTransaction(`comment:${inserted.id}`, '댓글 작성')
+    void notifyTransaction(`comment:${inserted.id}`, '댓글·답변 작성')
   }
 
   if (loading) {
@@ -686,7 +686,7 @@ export default function PostDetailPage() {
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={user ? '다른 사람의 글에 댓글 +1 P' : '로그인이 필요해요'}
+          placeholder={user ? '댓글·답변 남기기 +1 P' : '로그인이 필요해요'}
           disabled={!user}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {

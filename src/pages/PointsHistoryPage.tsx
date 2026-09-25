@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import PixelButton from '@/components/ui/PixelButton'
 import BackButton from '@/components/ui/BackButton'
 
-const reasons: Record<string, string> = { welcome: '가입 선물', welcome_adjustment: '가입 선물 20 P 조정', report: '매장 소식', comment: '댓글', like: '좋아요', place_open: '장소 7일 열람', feedback: '앱 사용 후기' }
+const reasons: Record<string, string> = { welcome: '가입 선물', welcome_adjustment: '가입 선물 20 P 조정', report: '매장 소식', question: '질문 작성', comment: '댓글·답변', like: '좋아요', place_open: '장소 7일 열람', feedback: '앱 사용 후기' }
 export default function PointsHistoryPage() {
   const { user } = useAuth()
   const navigate = useNavigate()

@@ -173,7 +173,7 @@ export default function OnboardingPage() {
 
         <PixelBorder padding={16}>
           <b>가입 선물 20 P를 드려요!</b>
-          <p style={{ fontSize: 13, lineHeight: 1.8, marginTop: 10 }}>카드 소식으로 +3 P, 다른 사람의 글에 댓글·첫 좋아요로 +1 P를 모아요. 가게 한 곳은 5 P로 1주일 동안 열람할 수 있어요. 홈에서 앱 사용 후기를 처음 남기면 +15 P!</p>
+          <p style={{ fontSize: 13, lineHeight: 1.8, marginTop: 10 }}>카드 소식으로 +3 P, 질문·댓글·답변, 다른 사람 글의 첫 좋아요로 각각 +1 P를 모아요. 가게 한 곳은 5 P로 1주일 동안 열람할 수 있어요. 홈에서 앱 사용 후기를 처음 남기면 +15 P!</p>
         </PixelBorder>
 
         <PixelBorder color="#111" bg="var(--paper-2)" padding={12}>
