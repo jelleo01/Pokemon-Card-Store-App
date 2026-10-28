@@ -32,6 +32,8 @@ export default function App() {
   }, [])
 
   return (
+    <>
+    <PointNotifications />
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -39,6 +41,9 @@ export default function App() {
       <Route path="/auth-wall" element={<AuthWallPage />} />
       <Route path="/policy" element={<PolicyPage />} />
       <Route element={<RequireAuth />}>
+        <Route path="/feedback" element={<FeedbackPage />} />
+        <Route path="/points" element={<PointsPage />} />
+        <Route path="/points/history" element={<PointsHistoryPage />} />
         <Route path="/notices" element={<NoticesPage />} />
         <Route path="/location" element={<LocationSearchPage />} />
         <Route path="/shop/:id" element={<ShopDetailPage />} />
@@ -52,5 +57,6 @@ export default function App() {
         <Route path="/my-posts" element={<MyPostsPage />} />
       </Route>
     </Routes>
+    </>
   )
 }
