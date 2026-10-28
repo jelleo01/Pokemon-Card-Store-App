@@ -1,3 +1,4 @@
+import AppFeedbackAdmin from '@/components/ui/AppFeedbackAdmin'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PixelBorder from '@/components/ui/PixelBorder'
@@ -9,7 +10,7 @@ import { gbStyles } from '@/lib/gbStyles'
 import { searchPlaces, type KakaoPlace } from '@/lib/kakao'
 import { SHOPS as SEED_SHOPS, type Shop, type ShopType } from '@/lib/data'
 
-type Tab = 'users' | 'shops' | 'notices' | 'inquiries' | 'meta'
+type Tab = 'feedback' | 'users' | 'shops' | 'notices' | 'inquiries' | 'meta'
 
 // seed 매장(클라이언트 SHOPS) 의 한글 type → DB enum 매핑
 const TYPE_KO_TO_DB: Record<ShopType, ShopRow['type']> = {
@@ -245,6 +246,7 @@ export default function AdminPage() {
             { id: 'shops', label: '매장', en: 'SHOPS' },
             { id: 'notices', label: '공지', en: 'NOTICES' },
             { id: 'inquiries', label: '문의', en: 'INQUIRIES' },
+            { id: 'feedback', label: '앱 후기', en: 'FEEDBACK' },
             { id: 'meta', label: '메타', en: 'META' },
           ] as { id: Tab; label: string; en: string }[]
         ).map((t, i, a) => {
@@ -298,6 +300,7 @@ export default function AdminPage() {
         {tab === 'shops' && <ShopsAdmin />}
         {tab === 'notices' && <NoticesAdmin />}
         {tab === 'inquiries' && <InquiriesAdmin />}
+        {tab === 'feedback' && <AppFeedbackAdmin />}
         {tab === 'meta' && <MetaAdmin />}
       </div>
     </div>

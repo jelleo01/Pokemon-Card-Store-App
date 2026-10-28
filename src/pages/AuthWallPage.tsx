@@ -60,7 +60,7 @@ export default function AuthWallPage() {
         <Sprite kind="mega" size={48} />
         <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.5 }}>{msg}</div>
         <div style={{ fontSize: 11, opacity: 0.7, lineHeight: 1.5 }}>
-          가입하면 10 포인트를 드려요.
+          가입하면 20 포인트를 드려요.
           <br />
           커뮤니티 활동을 위해 가입해 주세요.
         </div>
