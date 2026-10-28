@@ -155,7 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signInWithApple() {
-    if (Capacitor.isNativePlatform()) {
+    if (Capacitor.getPlatform() === 'ios') {
       const { response } = await SignInWithApple.authorize({
         clientId: 'com.jelleo01.pokemonmap',
         redirectURI: 'com.jelleo01.pokemonmap://login-callback',
@@ -166,6 +166,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         token: response.identityToken,
       })
       if (error) throw error
+    } else if (Capacitor.isNativePlatform()) {
+      // Android: 네이티브 Apple 로그인 없음 → Google 과 같은 인앱 브라우저 + 딥링크
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo: 'com.jelleo01.pokemonmap://login-callback',
+          skipBrowserRedirect: true,
+        },
+      })
+      if (error) throw error
+      if (data.url) await Browser.open({ url: data.url })
     } else {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
