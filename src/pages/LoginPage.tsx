@@ -7,6 +7,7 @@ import Sprite from '@/components/ui/Sprite'
 import BackButton from '@/components/ui/BackButton'
 import { useAuth } from '@/contexts/AuthContext'
 import { gbStyles } from '@/lib/gbStyles'
+import appleSignInButton from '@/assets/apple-signin-ko.png'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -179,26 +180,34 @@ export default function LoginPage() {
               </span>
             </PixelButton>
 
-            <PixelButton
-              full
-              color="#111"
-              bg="#111"
-              fg="#FAFAF7"
+            {/* Apple HIG: 공식 버튼 아트워크(appleid.cdn-apple.com 생성) 그대로 사용 */}
+            <button
+              type="button"
               onClick={handleApple}
               disabled={busy || !agreed}
+              aria-label="Apple로 로그인"
+              style={{
+                width: '100%',
+                height: 44,
+                padding: 0,
+                border: 'none',
+                borderRadius: 8,
+                background: '#000',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                cursor: busy || !agreed ? 'not-allowed' : 'pointer',
+                opacity: busy || !agreed ? 0.5 : 1,
+              }}
             >
-              <span
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  justifyContent: 'center',
-                }}
-              >
-                <AppleLogo />
-                <span>{busy ? '이동 중...' : 'Apple로 시작하기'}</span>
-              </span>
-            </PixelButton>
+              <img
+                src={appleSignInButton}
+                alt=""
+                draggable={false}
+                style={{ height: 44, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
+              />
+            </button>
           </div>
 
           {err && (
@@ -228,14 +237,6 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
-  )
-}
-
-function AppleLogo() {
-  return (
-    <svg width={16} height={16} viewBox="0 0 814 1000" aria-hidden fill="#FAFAF7">
-      <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-37.3-152.8-106.1C74.7 688.9 44.3 597.3 44.3 509.2c0-145.1 94.7-221.9 182.7-221.9 48.2 0 88.4 31.8 119 31.8 29.2 0 75.1-33.4 130.6-33.4 20.4 0 71.4 2 108.8 43.8zm-62-130.5c-28.7 33.2-75.4 57.8-122.5 57.8-4.1 0-8.3-.4-12.5-.9 1.5-48.3 34.8-97.1 67.4-127.6 35.3-33.2 95.7-58.6 144-60.3 1.7 50.6-19.6 100.1-76.4 131z" />
-    </svg>
   )
 }
 

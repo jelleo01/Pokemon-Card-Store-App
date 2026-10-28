@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">트레이너 카드샵 맵</string>
+    <string name="title_activity_main">트레이너 카드샵 맵</string>
+    <string name="package_name">com.jelleo01.pokemonmap</string>
+    <string name="custom_url_scheme">com.jelleo01.pokemonmap</string>
+</resources>

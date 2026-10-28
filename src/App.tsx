@@ -1,8 +1,7 @@
-import FeedbackPage from '@/pages/FeedbackPage'
-import PointsPage from '@/pages/PointsPage'
-import PointsHistoryPage from '@/pages/PointsHistoryPage'
-import PointNotifications from '@/components/ui/PointNotifications'
+import { useEffect } from 'react'
 import { Routes, Route } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
+import { App as CapApp } from '@capacitor/app'
 import RequireAuth from '@/components/RequireAuth'
 import HomePage from '@/pages/HomePage'
 import MapPage from '@/pages/MapPage'
@@ -22,6 +21,16 @@ import AdminPage from '@/pages/AdminPage'
 import MyPostsPage from '@/pages/MyPostsPage'
 
 export default function App() {
+  // Android 뒤로가기: 히스토리가 있으면 이전 화면, 없으면 앱 종료
+  useEffect(() => {
+    if (Capacitor.getPlatform() !== 'android') return
+    const sub = CapApp.addListener('backButton', ({ canGoBack }) => {
+      if (canGoBack) window.history.back()
+      else CapApp.exitApp()
+    })
+    return () => { sub.then(l => l.remove()) }
+  }, [])
+
   return (
     <>
     <PointNotifications />
